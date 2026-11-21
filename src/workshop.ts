@@ -1,72 +1,185 @@
-// Para değerleri kuruştur. Bir üretim emri daima tek parti işler.
-export const recipe = Object.freeze({
-  chairs: 10, boards: 20, kits: 10, boardPrice: 4000, kitPrice: 2000,
-  labor: 30000, unitSale: 18000, durationMs: 60000, startingCash: 200000
-});
-export const materials = recipe.boards * recipe.boardPrice + recipe.kits * recipe.kitPrice;
-export const cost = materials + recipe.labor;
-export const revenue = recipe.chairs * recipe.unitSale;
-
-export type Command = 'buy' | 'start' | 'collect' | 'sell';
+import { catalog } from "./catalog.ts";
+export const r = catalog.chair;
+export const CAPITAL = 15000000;
+export const DAY = 300000;
+export type Command =
+  "buy" | "assign" | "start" | "sell" | "upgrade" | "finish";
 export type Game = {
-  cash: number; boards: number; kits: number; chairs: number;
-  ready_at: number | null; sold: number; profit: number; revision: number;
+  cash: number;
+  lots: number;
+  rawCost: number;
+  chairs: number;
+  goodsCost: number;
+  workers: number;
+  level: number;
+  job: number;
+  wip: number;
+  ready: number;
+  born: number;
+  last: number;
+  marketDay: number;
+  taken: number;
+  sold: number;
+  income: number;
+  cogs: number;
+  tax: number;
+  freight: number;
+  investment: number;
+  rev: number;
 };
-
-type DB = {
-  execSync(sql: string): void;
-  runSync(sql: string, ...args: number[]): { changes: number };
-  getFirstSync<T>(sql: string): T | null;
-};
-
-export function openWorkshop(db: DB) {
-  db.execSync(`CREATE TABLE IF NOT EXISTS workshop (
-    id INTEGER PRIMARY KEY CHECK(id=1), cash INTEGER NOT NULL CHECK(cash>=0),
-    boards INTEGER NOT NULL CHECK(boards>=0), kits INTEGER NOT NULL CHECK(kits>=0),
-    chairs INTEGER NOT NULL CHECK(chairs>=0), ready_at INTEGER,
-    sold INTEGER NOT NULL, profit INTEGER NOT NULL, revision INTEGER NOT NULL
-  );
-  INSERT INTO workshop VALUES(1,${recipe.startingCash},0,0,0,NULL,0,0,0)
-    ON CONFLICT(id) DO NOTHING;`);
-  return readGame(db);
+export function initial(now: number): Game {
+  return {
+    cash: CAPITAL,
+    lots: 0,
+    rawCost: 0,
+    chairs: 0,
+    goodsCost: 0,
+    workers: 0,
+    level: 1,
+    job: 0,
+    wip: 0,
+    ready: 0,
+    born: now,
+    last: now,
+    marketDay: 1,
+    taken: 0,
+    sold: 0,
+    income: 0,
+    cogs: 0,
+    tax: 0,
+    freight: 0,
+    investment: 0,
+    rev: 0,
+  };
 }
-
-export function readGame(db: DB): Game {
-  const game = db.getFirstSync<Game>('SELECT cash,boards,kits,chairs,ready_at,sold,profit,revision FROM workshop WHERE id=1');
-  if (!game) throw new Error('Atölye kaydı bulunamadı.');
-  return game;
+export const profit = (g: Game) => g.income - g.cogs - g.tax - g.freight;
+export const day = (g: Game, now: number) =>
+  1 + Math.floor((Math.max(g.last, now) - g.born) / DAY);
+export function market(g: Game, now: number) {
+  const d = day(g, now);
+  const prices = [100, 105, 96, 110, 99],
+    limits = [10, 18, 12, 20, 16];
+  const i = (d - 1) % prices.length;
+  return {
+    day: d,
+    price: (r.basePrice * prices[i]) / 100,
+    demand: limits[i] - (g.marketDay === d ? g.taken : 0),
+  };
 }
-
-// Stok, zaman ve para tek SQL güncellemesiyle kaydedilir.
-// Ekrandaki sürüm eskiyse aynı dokunuş ikinci kez işlenmez.
-export function act(db: DB, command: Command, revision: number, now = Date.now()): Game {
-  let changed: { changes: number };
-  switch (command) {
-    case 'buy':
-      changed = db.runSync(`UPDATE workshop SET cash=cash-?,boards=boards+?,kits=kits+?,revision=revision+1
-        WHERE id=1 AND revision=? AND cash>=? AND boards=0 AND kits=0 AND ready_at IS NULL AND chairs=0`,
-        materials, recipe.boards, recipe.kits, revision, materials);
-      break;
-    case 'start':
-      changed = db.runSync(`UPDATE workshop SET cash=cash-?,boards=boards-?,kits=kits-?,ready_at=?,revision=revision+1
-        WHERE id=1 AND revision=? AND cash>=? AND boards>=? AND kits>=? AND ready_at IS NULL AND chairs=0`,
-        recipe.labor, recipe.boards, recipe.kits, now + recipe.durationMs, revision, recipe.labor, recipe.boards, recipe.kits);
-      break;
-    case 'collect':
-      changed = db.runSync(`UPDATE workshop SET chairs=chairs+?,ready_at=NULL,revision=revision+1
-        WHERE id=1 AND revision=? AND ready_at<=?`, recipe.chairs, revision, now);
-      break;
-    case 'sell':
-      changed = db.runSync(`UPDATE workshop SET chairs=chairs-?,cash=cash+?,sold=sold+?,profit=profit+?,revision=revision+1
-        WHERE id=1 AND revision=? AND chairs>=?`, recipe.chairs, revenue, recipe.chairs, revenue-cost, revision, recipe.chairs);
-      break;
-    default: throw new Error('Geçersiz işlem.');
+export const upgradePrice = (g: Game) => g.level * 300000;
+export const duration = (g: Game) => Math.ceil(r.duration / g.level);
+export function validate(g: Game) {
+  for (const key of Object.keys(initial(0)) as (keyof Game)[]) {
+    if (!Number.isSafeInteger(g[key]) || g[key] < 0)
+      throw new Error("Atölye kaydı tutarsız.");
   }
-  if (!changed.changes) throw new Error('İşlem yapılamadı. Güncel stok, bakiye ve üretim süresini kontrol edin.');
-  return readGame(db);
+  if (
+    g.level < 1 ||
+    g.level > 3 ||
+    g.workers > 1 ||
+    g.last < g.born ||
+    g.job > r.batch * g.level ||
+    !!g.job !== !!g.ready ||
+    !!g.job !== !!g.wip ||
+    !!g.lots !== !!g.rawCost ||
+    !!g.chairs !== !!g.goodsCost ||
+    g.cash + g.rawCost + g.wip + g.goodsCost + g.investment !==
+      CAPITAL + profit(g)
+  )
+    throw new Error("Atölye kaydındaki bakiye veya stok doğrulanamadı.");
 }
-export function stage(game: Game): Command {
-  if (game.chairs >= recipe.chairs) return 'sell';
-  if (game.ready_at !== null) return 'collect';
-  return game.boards >= recipe.boards ? 'start' : 'buy';
+function need(ok: boolean, message: string) {
+  if (!ok) throw new Error(message);
+}
+export function advance(
+  previous: Game,
+  cmd: Command,
+  now: number,
+  qty = 1,
+): Game {
+  const g = {
+    ...previous,
+    last: Math.max(now, previous.last),
+    rev: previous.rev + 1,
+  };
+  const q = market(g, g.last);
+  if (g.marketDay !== q.day) {
+    g.marketDay = q.day;
+    g.taken = 0;
+  }
+  switch (cmd) {
+    case "buy":
+      need(g.cash >= r.materials, "Ham madde için bakiye yetersiz.");
+      g.cash -= r.materials;
+      g.rawCost += r.materials;
+      g.lots++;
+      break;
+    case "assign":
+      need(!g.job, "Üretim bitince usta görevini değiştirebilirsiniz.");
+      g.workers = 1 - g.workers;
+      break;
+    case "start": {
+      need(!g.job && g.workers === 1, "Hat boş olmalı ve bir usta atanmalı.");
+      need(
+        Number.isInteger(qty) && qty >= 1 && qty <= g.level && qty <= g.lots,
+        "Stok veya makine kapasitesi yetersiz.",
+      );
+      const expense = qty * (r.energy + r.packaging);
+      need(g.cash >= expense, "Enerji ve paketleme için bakiye yetersiz.");
+      const used = Math.round((g.rawCost * qty) / g.lots);
+      g.rawCost -= used;
+      g.lots -= qty;
+      g.cash -= expense;
+      g.wip = used + expense;
+      g.job = qty * r.batch;
+      g.ready = g.last + duration(g);
+      break;
+    }
+    case "finish":
+      need(g.job > 0 && g.last >= g.ready, "Üretim devam ediyor.");
+      g.chairs += g.job;
+      g.goodsCost += g.wip;
+      g.wip = 0;
+      g.job = 0;
+      g.ready = 0;
+      break;
+    case "sell": {
+      need(
+        Number.isInteger(qty) && qty > 0 && qty <= g.chairs && qty <= q.demand,
+        "Satış için stok veya günlük talep yetersiz.",
+      );
+      const gross = qty * q.price,
+        tax = Math.round((gross * 5) / 100),
+        freight = qty * r.shippingPerUnit;
+      const basis = Math.round((g.goodsCost * qty) / g.chairs);
+      g.cash += gross - tax - freight;
+      g.income += gross;
+      g.tax += tax;
+      g.freight += freight;
+      g.goodsCost -= basis;
+      g.cogs += basis;
+      g.chairs -= qty;
+      g.sold += qty;
+      g.taken += qty;
+      break;
+    }
+    case "upgrade": {
+      const price = upgradePrice(g);
+      need(
+        !g.job &&
+          g.level < 3 &&
+          g.cash >= price &&
+          profit(g) - g.investment >= price,
+        "Geliştirme için boş hat ve yeterli birikmiş kazanç gerekli.",
+      );
+      g.cash -= price;
+      g.investment += price;
+      g.level++;
+      break;
+    }
+    default:
+      throw new Error("Geçersiz işlem.");
+  }
+  validate(g);
+  return g;
 }

@@ -1,24 +1,28 @@
 # FABRİKATÖR
 
-Türkçe, tek oyunculu bir mobil atölye oyunu. İlk aşamada tek ürün olan ahşap sandalyeyi onarlı partilerle üretip satarsınız. Ekrandaki izometrik atölye, malzeme ve mamul stoklarına göre değişir. Kasa, stok, gerçekleşen satış kârı ve üretimin biteceği zaman cihazdaki SQLite dosyasında tutulur.
+Türkçe, çevrimdışı bir iOS ve Android atölye simülasyonu. Expo Router ile Ana Panel, Fabrikam, Üretim, Depo, Piyasa ve Finans ekranları arasında gezilir. Oyuncu küçük bir mobilya atölyesi ve 150.000 TL ile başlar.
 
-## Bir parti oynayın
+## İlk on sandalye
 
-1. 2.000 TL başlangıç sermayesinden 1.000 TL ödeyerek 20 tahta ve 10 bağlantı seti alın.
-2. 300 TL işçilik ödeyerek üretimi başlatın. Montaj 60 saniye sürer. Uygulama kapalıyken de cihaz saatine göre süre ilerler.
-3. Hazır olan 10 sandalyeyi depoya alın. Sandalye başına maliyet 130 TL'dir.
-4. Partiyi 1.800 TL'ye satın. Kasa 2.500 TL, gerçekleşen kâr 500 TL olur. Sonraki partiyi aynı atölyede başlatabilirsiniz.
+1. **Depo** ekranında 4.000 TL karşılığında 20 tahta ve 10 bağlantı seti alın. Kasa 146.000 TL olur.
+2. **Fabrikam** ekranında montaj ustasını hatta atayın.
+3. **Üretim** ekranında 10 sandalye başlatın. Enerji 300 TL, paketleme 200 TL tutar. Kasa 145.500 TL olur. Bir dakika sonra 10 sandalye otomatik olarak depoya girer. Uygulama kapalıysa bitiş zamanı ilk açılışta işlenir.
+4. İlk oyun gününde **Piyasa** ekranındaki toptancıya 10 sandalyeyi 850 TL/adetten satın.
+5. **Finans** ekranında brüt gelir 8.500 TL, satılan mal maliyeti 4.500 TL, nakliye 300 TL, oyun vergisi 425 TL ve sabit gider öncesi kazanç 3.275 TL görünür. Kasa 153.275 TL olur.
+6. Hattı 3.000 TL birikmiş kazançla ikinci seviyeye yükseltin. İki parti ham maddeyle bir çevrimde 20 sandalye üretebilirsiniz. Süre 30 saniyeye iner.
 
-Reçete ve denge değerleri ilk prototip için seçilmiştir. Kaynak tasarım belgeleri teslim edildiğinde karşılaştırılacak değerler `src/workshop.ts` içindedir.
+Bir oyun günü beş gerçek dakikadır. Günlük teklif ve talep beş günlük bir döngü izler. Toptancı, eldeki ve o gün istediği miktarın küçük olanını alır. İlk prototipteki kayıt aktarılırken başlangıç sermayesi farkı eklenir. Eldeki mal ve devam eden işlerin önceki maliyeti korunur.
 
-## iPhone ve Android
+## iPhone'da deneme
 
-Bilgisayarda Node.js 24 veya daha yenisiyle proje dizininde `npm ci` ve `npm start` çalıştırın. Telefon ile bilgisayar aynı Wi-Fi ağında olsun. Expo SDK 58 destekleyen Expo Go sürümünü kullanın. iPhone kamerasıyla terminaldeki QR kodu okutun; Android'de Expo Go içindeki QR okuyucusunu kullanın. İlk geliştirme paketi bilgisayardan yüklenir.
+Node.js 24+ olan bilgisayarda proje dizininde `npm ci` ve `npm start` çalıştırın. iPhone ile bilgisayarı aynı Wi-Fi ağına bağlayın. iPhone'da Expo SDK 58 destekleyen Expo Go'yu kurun ve bilgisayardaki QR kodunu Kamera ile okutun. Android'de Expo Go'nun QR okuyucusunu kullanın.
 
-iPhone'da çevrimdışı soğuk açılışı doğrulamak için Mac'te Xcode ve iOS imzalama hesabıyla `npx expo run:ios --device --configuration Release` çalıştırın. Uygulamada üretimi başlatın, uçak moduna geçin ve uygulamayı tamamen kapatın. Bir dakika sonra yeniden açıp sandalyeleri depoya alın ve satın. Android cihazda Android SDK ile `npx expo run:android --device --variant release` kullanılabilir. Uygulamanın silinmesi yerel kaydı da silebilir.
+Metro sunucusundan bağımsız çevrimdışı deneme için Mac, Xcode ve iOS imzalama yapılandırmasıyla `npx expo run:ios --device --configuration Release` çalıştırın. Üretimi başlatıp uçak modunda uygulamayı tamamen kapatın. Bir dakika sonra açın ve **Depo** ekranında on sandalyeyi doğrulayın. Android için `npx expo run:android --device --variant release` kullanılabilir.
 
-## Otomatik kontroller
+## Geliştirme ve doğrulama
 
-- `npm test` Node'un yerleşik SQLite motorunda oyun komutlarını ve diskten geri yüklemeyi sınar.
-- `npm run typecheck` TypeScript denetimini çalıştırır.
-- `npx expo export --platform all` iki mobil platform için dağıtım paketlerini oluşturur.
+- `src/catalog.ts` oynanabilir sektörü, ürünü, reçeteyi ve temel fiyatları tanımlar.
+- `src/workshop.ts` ekonomi kurallarını kuruş cinsinden uygular. Stok maliyetini satış anında giderleştirir. Makine alımını yatırım olarak kaydeder.
+- `src/store.ts` her komutu kayıt sürümüyle doğrular ve oyun durumuyla nakit hareketini tek SQLite işlemi içinde yazar.
+- `npm test` gerçek SQLite üzerinde ekonomi, tekrar gönderim, çevrimdışı ilerleme, kayıt taşıma ve işlemi geri alma kontrollerini çalıştırır.
+- `npm run typecheck` ve `npx expo export --platform all` TypeScript ve iki mobil platform paketini denetler.
