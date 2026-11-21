@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "FABRİKATÖR",
+    "slug": "fabrikator",
+    "version": "0.1.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.fabrikator.oyun"
+    },
+    "android": {
+      "package": "com.fabrikator.oyun"
+    }
+  }
+}
