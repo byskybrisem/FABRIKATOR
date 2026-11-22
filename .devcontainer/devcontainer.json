@@ -1,0 +1,6 @@
+{
+  "name": "FABRİKATÖR · Expo SDK 58",
+  "image": "node:24-bookworm",
+  "remoteUser": "node",
+  "postCreateCommand": "node --version && npm ci && npm run typecheck && npm test"
+}
