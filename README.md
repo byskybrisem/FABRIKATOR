@@ -18,7 +18,7 @@ Bir oyun günü beş gerçek dakikadır. Günlük teklif ve talep beş günlük 
 ### Bilgisayarsız, GitHub Codespaces ile
 
 1. iPhone'a App Store'dan Expo Go'yu yükleyin. Safari'de [FABRIKATOR deposunu](https://github.com/byskybrisem/FABRIKATOR) açın. Dal menüsünde `feat/ilk-sandalye-partisi` dalını seçip **Code → Codespaces → Create codespace** yolunu izleyin. Menü sığmıyorsa Safari'den **Masaüstü Web Sitesi İste** seçeneğini kullanın.
-2. Codespace kurulumu Node.js 24 üzerinde `npm ci`, TypeScript denetimi ve ekonomi testlerini çalıştırır. Kurulum bittiğinde **Terminal → New Terminal** açın. Expo hesabıyla giriş yapmanız istenirse `npx expo login` çalıştırın ve Expo hesabınızı terminalde doğrulayın. Durumu görmek için `npx expo whoami` çalıştırabilirsiniz. Bu projede Expo hesabı oyunun kendi üyeliği değildir.
+2. Codespace kurulumu Node.js 24 üzerinde `npm ci`, TypeScript denetimi ve ekonomi testlerini çalıştırır. Kurulum bittiğinde **Terminal → New Terminal** açın. SDK 58'in varsayılan tüneli Expo hesabı ister. `npx expo login` çalıştırın ve kendi Expo hesabınızla giriş yapın. Sonucu `npx expo whoami` ile kontrol edin.
 3. `npx expo start --tunnel --go` çalıştırın. `npm run start:iphone` aynı komutu çalıştırır. `Tunnel ready` mesajından sonra **Metro waiting on** satırındaki `exp://…` bağlantısını kopyalayıp aynı iPhone'da Safari adres çubuğuna yapıştırın ve **Expo Go'da Aç** seçeneğini onaylayın. Terminaldeki bağlantı bir Ports önizleme adresi değildir. Aynı telefonda QR okutmanız gerekmez.
 4. Oyunda **Depo → Fabrikam → Üretim → Piyasa → Finans** sırasını izleyin. Test sırasında Codespace ve Metro açık kalmalı. Codespace durursa yeniden başlatıp tünel komutunu tekrar çalıştırın. Terminal yeni bir bağlantı verirse Expo Go'yu onunla açın.
 
