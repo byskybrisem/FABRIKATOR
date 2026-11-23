@@ -267,3 +267,18 @@ test("yeni günde verilen sipariş, maaşı ayrı hareket olarak önce yazar", (
   ]);
   assert.equal(g.cash, CAPITAL - WAGE - 400000);
 });
+
+test("yeni günde biten üretim, maaşı kendi satırında gösterir", (t) => {
+  const d = db(t);
+  let g = started(d);
+  g = resume(d, DAY + 1);
+  const rows = d.sql
+    .prepare("SELECT kind, movement FROM factory_log ORDER BY revision")
+    .all()
+    .map((row) => [row.kind, row.movement]);
+  assert.deepEqual(rows.slice(-2), [
+    ["payroll", -WAGE],
+    ["finish", 0],
+  ]);
+  assert.equal(g.chairs, 10);
+});
