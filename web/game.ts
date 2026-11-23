@@ -903,102 +903,109 @@ function warehouse(g: Game) {
 }
 
 function trade(g: Game, now: number) {
-  const cards = openProducts(g).map((pid) => {
-    const r = catalog[pid],
-      q = market(g, now, pid),
-      // Açık siparişlerin ihtiyacı toptancı düğmelerine konmaz.
-      n = Math.min(spare(g, pid), q.demand);
-    const tomorrow = market(
-      { ...g, marketDay: 0 },
-      Math.max(now, g.last) + nextDayIn(g, now),
-      pid,
-    );
-    const quote = (k: number) => {
-      const s = g.goods[pid];
-      const gross = k * q.price,
-        tax = Math.round((gross * 5) / 100),
-        freight = k * r.shippingPerUnit;
-      const basis = s.qty ? Math.round((s.cost * k) / s.qty) : 0;
-      return {
-        gross,
-        tax,
-        freight,
-        net: gross - tax - freight,
-        basis,
-        gain: gross - tax - freight - basis,
+  // Kilidi itibar düşüşüyle yeniden kapanan ürünün stoğu yine de satılabilir.
+  const cards = products
+    .filter((p) => !lockReason(g, p) || g.goods[p].qty)
+    .map((pid) => {
+      const r = catalog[pid],
+        q = market(g, now, pid),
+        // Açık siparişlerin ihtiyacı toptancı düğmelerine konmaz.
+        n = Math.min(spare(g, pid), q.demand);
+      const tomorrow = market(
+        { ...g, marketDay: 0 },
+        Math.max(now, g.last) + nextDayIn(g, now),
+        pid,
+      );
+      const quote = (k: number) => {
+        const s = g.goods[pid];
+        const gross = k * q.price,
+          tax = Math.round((gross * 5) / 100),
+          freight = k * r.shippingPerUnit;
+        const basis = s.qty ? Math.round((s.cost * k) / s.qty) : 0;
+        return {
+          gross,
+          tax,
+          freight,
+          net: gross - tax - freight,
+          basis,
+          gain: gross - tax - freight - basis,
+        };
       };
-    };
-    const options = [...new Set([n, Math.min(n, 10), Math.ceil(n / 2)])]
-      .filter((k) => k > 0)
-      .sort((a, b) => b - a);
-    const all = quote(n);
-    return card(
-      r.name,
-      '<div class="grid2">' +
-        stat("Fiyat", money(q.price), "adet başına") +
-        stat(
-          "Kalan talep",
-          q.demand + " adet",
-          "yarın " + money(tomorrow.price) + " · " + tomorrow.demand + " adet",
-          q.demand ? "ok" : "warn",
-        ) +
-        "</div>" +
-        "<dl>" +
-        line(
-          "Satılabilir stok",
-          available(g, pid) +
-            " adet" +
-            (g.goods[pid].reserved
-              ? " (" + g.goods[pid].reserved + " siparişe ayrıldı)"
-              : ""),
-        ) +
-        (owed(g, pid)
-          ? line(
-              "Açık siparişlerin ihtiyacı",
-              owed(g, pid) + " adet · satarsanız teslim gecikebilir",
-              "bad",
-            )
-          : "") +
-        (n
-          ? line("Kasaya girecek (" + n + ")", money(all.net)) +
-            line(
-              "Satış kârı (" + n + ")",
-              signed(all.gain),
-              all.gain >= 0 ? "good" : "bad",
-            )
-          : "") +
-        "</dl>" +
-        (n
-          ? '<div class="actions">' +
-            options
-              .map((k) =>
-                button(
-                  "sell",
-                  k + " " + r.acc + " sat · +" + money(quote(k).net),
-                  { qty: k, product: pid, kind: k === n ? "" : "ghost" },
-                ),
+      const options = [...new Set([n, Math.min(n, 10), Math.ceil(n / 2)])]
+        .filter((k) => k > 0)
+        .sort((a, b) => b - a);
+      const all = quote(n);
+      return card(
+        r.name,
+        '<div class="grid2">' +
+          stat("Fiyat", money(q.price), "adet başına") +
+          stat(
+            "Kalan talep",
+            q.demand + " adet",
+            "yarın " +
+              money(tomorrow.price) +
+              " · " +
+              tomorrow.demand +
+              " adet",
+            q.demand ? "ok" : "warn",
+          ) +
+          "</div>" +
+          "<dl>" +
+          line(
+            "Satılabilir stok",
+            available(g, pid) +
+              " adet" +
+              (g.goods[pid].reserved
+                ? " (" + g.goods[pid].reserved + " siparişe ayrıldı)"
+                : ""),
+          ) +
+          (owed(g, pid)
+            ? line(
+                "Açık siparişlerin ihtiyacı",
+                owed(g, pid) + " adet · satarsanız teslim gecikebilir",
+                "bad",
               )
-              .join("") +
-            "</div>"
-          : button(
-              "sell",
-              !available(g, pid)
-                ? "Satılacak " + r.short + " yok"
-                : !spare(g, pid)
-                  ? "Stok açık siparişler için tutuluyor"
-                  : "Yeni günün teklifini bekle",
-              {
-                disabled: true,
-                product: pid,
-                hint: !available(g, pid)
-                  ? "Önce üretim yapın."
+            : "") +
+          (n
+            ? line("Kasaya girecek (" + n + ")", money(all.net)) +
+              line(
+                "Satış kârı (" + n + ")",
+                signed(all.gain),
+                all.gain >= 0 ? "good" : "bad",
+              )
+            : "") +
+          "</dl>" +
+          (n
+            ? '<div class="actions">' +
+              options
+                .map((k) =>
+                  button(
+                    "sell",
+                    k + " " + r.acc + " sat · +" + money(quote(k).net),
+                    { qty: k, product: pid, kind: k === n ? "" : "ghost" },
+                  ),
+                )
+                .join("") +
+              "</div>"
+            : button(
+                "sell",
+                !available(g, pid)
+                  ? "Satılacak " + r.short + " yok"
                   : !spare(g, pid)
-                    ? "Siparişleri teslim edin ya da fazlasını üretin."
-                    : "Bugünkü talep doldu.",
-              },
-            )),
-    );
-  });
+                    ? "Stok açık siparişler için tutuluyor"
+                    : "Yeni günün teklifini bekle",
+                {
+                  disabled: true,
+                  product: pid,
+                  hint: !available(g, pid)
+                    ? "Önce üretim yapın."
+                    : !spare(g, pid)
+                      ? "Siparişleri teslim edin ya da fazlasını üretin."
+                      : "Bugünkü talep doldu.",
+                },
+              )),
+      );
+    });
   return (
     card(
       "Toptancı",

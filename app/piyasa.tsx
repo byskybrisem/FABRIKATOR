@@ -23,7 +23,7 @@ export default function Market() {
         <Line label="Satış vergisi" value="%5" />
       </Card>
       {products
-        .filter((p) => unlocked(g, p))
+        .filter((p) => unlocked(g, p) || g.goods[p].qty > 0)
         .map((p) => {
           const r = catalog[p],
             q = market(g, now, p),

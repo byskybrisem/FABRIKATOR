@@ -346,6 +346,20 @@ class WebDemo(unittest.TestCase):
         self.check_stat("Kasa", "154.125 TL")
         self.assertEqual(self.errors, [])
 
+    def test_relocked_product_stock_stays_sellable(self):
+        # İtibar cezayla 15'in altına düşerse masa üretimi kilitlenir ama depodaki masalar satılabilir.
+        def stock(g):
+            g["cash"] -= 640000
+            g["goods"]["table"] = {"qty": 5, "cost": 640000, "reserved": 0}
+            g["rep"] = 10
+        self.set_game(stock)
+        self.visit("Piyasa")
+        card = self.page.locator(".card").filter(has=self.page.get_by_role("heading", name="Yemek masası"))
+        card.get_by_role("button", name="3 masayı sat").click()
+        expect(self.page.locator("#message")).to_have_text("Satış tamamlandı, tahsilat kasada.")
+        self.visit("Üretim")
+        expect(self.page.get_by_role("button", name="Yemek masası")).to_be_disabled()
+
     def test_counter_offer_outcomes_and_declines(self):
         low = dict(self.OFFER, id="1-1", customer=1, ceiling=960000)
         self.set_game(lambda g: g.update(offers=[self.OFFER, low]))
