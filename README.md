@@ -8,9 +8,16 @@ GitHub Pages dağıtım adresi [FABRİKATÖR web demosu](https://byskybrisem.git
 
 Web sürümü mobil uygulamayla aynı `src/workshop.ts` ve `src/catalog.ts` kodunu kullanır. Tarayıcıda stok, kasa ve son hareketler tek IndexedDB işlemiyle kaydedilir. Mobil sürüm SQLite kullanır. İki sürüm arasında kayıt aktarımı yoktur.
 
-**Geliştirme:** Node.js 24 ile `npm ci && npm run build:web` çalıştırın. `dist/site` statik site köküdür. Tarayıcı testleri bu siteyi yalnızca yerel bir sunucunun `/FABRIKATOR/` alt dizininde açar. Python ortamında `pip install playwright==1.62.0`, ardından `python -m playwright install --with-deps webkit chromium` çalıştırın. `python tests/web_browser.py` ve `BROWSER=chromium python tests/web_browser.py` iki motoru ayrı ayrı doğrular.
+- Kayıtlar sürüm numarası taşır. Daha yeni bir sürümün kaydı bu sürümde açılmaz ve üzerine yazılmaz.
+- Doğrulanamayan kayıt sessizce sıfırlanmaz. Oyuncu onay verirse eski kayıt aynı tarayıcıda `yedek-…` anahtarıyla saklanır ve yeni oyun başlar.
+- **Finans → Yeni oyun başlat** onay penceresi açar. Başka sekmede sıfırlamadan önce hazırlanmış işlemler reddedilir.
+- `/FABRIKATOR/depo` gibi doğrudan bağlantılar `404.html` üzerinden `#depo` ekranına yönlenir. Sayfa yenilemek 404 vermez.
+- Tarayıcı kaydı bulut yedeği değildir. Özel gezinme veya site verilerini silmek kaydı siler.
+- Üretim, bitiş zamanı geçtikten sonraki ilk açılışta bir kez tamamlanır. Cihaz saati geri alınırsa sayaç bir çevrimden uzun görünmez. Mobil sürümde olduğu gibi üretim gerçek bitiş zamanını bekler. Tasarım belgesindeki üç günlük çevrimdışı üst sınır ve 10 dakikalık oyun günü henüz motorda yok; motor 5 dakikalık günü kullanır.
 
-**Yayın:** GitHub'da **Settings → Pages → Source → GitHub Actions** seçin. `FABRIKATOR Web` iş akışı PR'larda doğrulama yapar. `main` güncellendiğinde doğrulama başarılıysa yalnızca `dist/site` yayımlanır. Pages sonradan açılırsa aynı iş akışı Actions sekmesinden `main` için elle çalıştırılabilir.
+**Geliştirme:** Node.js 24 ile `npm ci && npm run build:web` çalıştırın. `dist/site` statik site köküdür. Tarayıcı testleri bu siteyi yalnızca yerel bir sunucunun `/FABRIKATOR/` alt dizininde açar. Python ortamında `pip install playwright==1.62.0`, ardından `python -m playwright install --with-deps webkit chromium` çalıştırın. `python tests/web_browser.py` ve `BROWSER=chromium python tests/web_browser.py` iki motoru ayrı ayrı doğrular. Yayın işi, dağıtımdan sonra canlı adresin oyunu sunduğunu da kontrol eder.
+
+**Yayın:** Tek seferlik olarak GitHub'da **Settings → Pages → Build and deployment → Source → GitHub Actions** seçin. Pages kapalıyken yayın adımı `404 Ensure GitHub Pages has been enabled` hatası verir. `FABRIKATOR Web` iş akışı PR'larda doğrulama yapar. `main` güncellendiğinde doğrulama başarılıysa yalnızca `dist/site` yayımlanır. Pages sonradan açılırsa aynı iş akışı Actions sekmesinden `main` için elle çalıştırılabilir.
 
 ## İlk on sandalye
 

@@ -15,6 +15,18 @@ class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def send_error(self, code, message=None, explain=None):
+        # Mirror GitHub Pages: unknown paths get the site's 404.html.
+        page = Path(self.directory) / "FABRIKATOR" / "404.html"
+        if code != 404 or not page.exists():
+            return super().send_error(code, message, explain)
+        body = page.read_bytes()
+        self.send_response(404)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
 
 class WebDemo(unittest.TestCase):
     @classmethod
@@ -47,13 +59,32 @@ class WebDemo(unittest.TestCase):
         self.start = datetime(2026, 1, 1, tzinfo=timezone.utc)
         self.page = self.open(self.start)
 
-    def open(self, when):
+    def open(self, when, path="", heading="Ana panel"):
         page = self.context.new_page()
         page.on("pageerror", lambda err: self.errors.append(str(err)))
         page.clock.set_fixed_time(when)
-        page.goto(self.url)
-        expect(page.get_by_role("heading", name="Ana panel")).to_be_visible()
+        page.goto(self.url + path)
+        expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
         return page
+
+    def put_raw(self, record):
+        self.page.evaluate("""async (record) => {
+          const {openSave}=await import('./web/storage.js');
+          const db=await openSave();
+          await new Promise((ok,fail)=>{const tx=db.transaction('workshop','readwrite');
+            tx.objectStore('workshop').put(record,1); tx.oncomplete=ok; tx.onabort=fail;});
+          db.close();
+        }""", record)
+
+    def stored(self):
+        return self.page.evaluate("""async () => {
+          const {openSave}=await import('./web/storage.js');
+          const db=await openSave();
+          const all=await new Promise(ok=>{const out={};const tx=db.transaction('workshop');
+            const c=tx.objectStore('workshop').openCursor();
+            c.onsuccess=()=>{const cur=c.result; if(!cur) return ok(out); out[String(cur.key)]=cur.value; cur.continue();};});
+          db.close(); return all;
+        }""")
 
     def visit(self, name):
         self.page.get_by_role("navigation").get_by_role("link", name=name, exact=True).click()
@@ -129,6 +160,100 @@ class WebDemo(unittest.TestCase):
         manifest=self.page.request.get(self.url+"manifest.webmanifest").json()
         self.assertEqual(manifest["start_url"], "./")
         self.assertEqual(self.page.request.get(self.url+manifest["icons"][0]["src"]).status, 200)
+        self.assertEqual(self.errors, [])
+
+    def test_direct_links_survive_reload(self):
+        p = self.open(self.start, "depo", "Depo")
+        self.assertTrue(p.url.endswith("/FABRIKATOR/#depo"))
+        p.reload()
+        expect(p.get_by_role("heading", name="Depo", exact=True)).to_be_visible()
+        p.goto(self.url + "#piyasa")
+        expect(p.get_by_role("heading", name="Piyasa", exact=True)).to_be_visible()
+        self.assertEqual(self.errors, [])
+
+    def test_double_tap_buys_once_and_reset_needs_confirmation(self):
+        p = self.page
+        self.visit("Depo")
+        p.get_by_role("button", name="Bir parti al").dblclick()
+        self.check_stat("Tahta", "20")
+        p.reload()
+        self.check_stat("Tahta", "20")
+        self.visit("Finans")
+        self.check_stat("Kasa", "146.000 TL")
+        p.once("dialog", lambda d: d.dismiss())
+        p.get_by_role("button", name="Yeni oyun başlat").click()
+        self.check_stat("Kasa", "146.000 TL")
+        p.once("dialog", lambda d: d.accept())
+        p.get_by_role("button", name="Yeni oyun başlat").click()
+        expect(p.get_by_role("heading", name="Ana panel")).to_be_visible()
+        expect(p.get_by_text("150.000 TL", exact=True)).to_be_visible()
+        backups = [k for k in self.stored() if k.startswith("yedek-")]
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(self.errors, [])
+
+    def test_corrupt_save_is_kept_until_player_confirms(self):
+        bad = {"version": 1, "game": {"cash": -5}, "log": []}
+        self.put_raw(bad)
+        self.page.reload()
+        p = self.page
+        expect(p.get_by_role("heading", name="Kayıt açılamadı")).to_be_visible()
+        p.once("dialog", lambda d: d.dismiss())
+        p.get_by_role("button", name="Kaydı yedekle, yeni oyun başlat").click()
+        self.assertEqual(self.stored()["1"], bad)
+        p.once("dialog", lambda d: d.accept())
+        p.get_by_role("button", name="Kaydı yedekle, yeni oyun başlat").click()
+        expect(p.get_by_text("150.000 TL", exact=True)).to_be_visible()
+        saved = self.stored()
+        self.assertEqual([saved[k] for k in saved if k.startswith("yedek-")], [bad])
+        self.assertEqual(saved["1"]["version"], 1)
+
+    def test_newer_save_version_is_not_overwritten(self):
+        newer = {"version": 99, "game": {}, "log": []}
+        self.put_raw(newer)
+        self.page.reload()
+        expect(self.page.get_by_text("daha yeni bir sürümüyle")).to_be_visible()
+        self.assertEqual(self.stored()["1"], newer)
+
+    def test_second_tab_follows_and_stale_actions_are_rejected(self):
+        a = self.page
+        b = self.open(self.start, "#depo", "Depo")
+        self.visit("Depo")
+        a.get_by_role("button", name="Bir parti al").click()
+        # The other tab refreshes from the broadcast instead of keeping old stock.
+        expect(b.locator(".line").filter(has=b.get_by_text("Tahta", exact=True)).locator("dd")).to_have_text("20")
+        result = a.evaluate("""async () => {
+          const {openSave,transact,resetSave}=await import('./web/storage.js');
+          const db=await openSave(); const before=(await transact(db)).game;
+          await resetSave(db, before.born+1);
+          const errs=[];
+          try { await transact(db,{command:'buy',revision:0,born:before.born}); } catch(e){ errs.push(e.message); }
+          const after=(await transact(db)).game; db.close();
+          return {errs, cash:after.cash, lots:after.lots};
+        }""")
+        self.assertEqual(result["cash"], 15000000)
+        self.assertEqual(result["lots"], 0)
+        self.assertIn("yeni oyun", result["errs"][0])
+
+    def test_finish_once_across_reloads_and_clock_rollback(self):
+        p = self.page
+        self.visit("Depo"); p.get_by_role("button", name="Bir parti al").click()
+        self.visit("Fabrikam"); p.get_by_role("button", name="Ustayı hatta ata").click()
+        self.visit("Üretim"); p.get_by_role("button", name="10 sandalye üret").click()
+        self.check_stat("Üretimde", "10 sandalye")  # committed before the tab closes
+        p.close()
+        # Device clock moved backwards: still in production, never negative time.
+        self.page = self.open(self.start - timedelta(hours=2), "#uretim", "Üretim")
+        self.check_stat("Depoya giriş", "60 sn")
+        self.page.close()
+        later = self.start + timedelta(seconds=60)
+        first = self.open(later, "#depo", "Depo")
+        second = self.open(later, "#depo", "Depo")
+        for tab in (first, second):
+            tab.reload()
+            expect(tab.locator(".line").filter(has=tab.get_by_text("Ahşap sandalye", exact=True)).locator("dd")).to_have_text("10 adet")
+        self.page = second
+        self.visit("Finans")
+        self.check_stat("Kasa", "145.500 TL")
         self.assertEqual(self.errors, [])
 
 

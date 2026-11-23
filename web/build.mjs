@@ -28,3 +28,17 @@ await writeFile(
     .replace("__VERSION__", hash.digest("hex").slice(0, 16))
     .replace("__FILES__", JSON.stringify(files)),
 );
+// GitHub Pages serves 404.html for unknown paths. Turn /FABRIKATOR/depo into
+// /FABRIKATOR/#depo without hard-coding the repository name.
+const pages = ["panel", "fabrikam", "uretim", "depo", "piyasa", "finans"];
+await writeFile(
+  new URL("404.html", out),
+  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FABRİKATÖR</title><script>
+const pages=${JSON.stringify(pages)};
+const parts=location.pathname.split("/").filter(Boolean);
+const hit=parts.findIndex(p=>pages.includes(p.toLowerCase()));
+const base="/"+parts.slice(0,hit>0?hit:1).join("/")+"/";
+location.replace(base+(hit>0?"#"+parts[hit].toLowerCase():""));
+</script></head><body style="background:#101719;color:#e8efe9;font-family:system-ui;padding:24px"><p>FABRİKATÖR açılıyor… <a style="color:#c4e86b" href="/">Ana sayfa</a></p></body></html>
+`,
+);
