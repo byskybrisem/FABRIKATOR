@@ -542,7 +542,7 @@ export function advance(
     product = "chair",
     id,
   } = typeof arg === "number" ? { qty: arg } : arg;
-  need(catalog[product], "Geçersiz ürün.");
+  need(Object.hasOwn(catalog, product), "Geçersiz ürün.");
   const p = catalog[product];
   const g: Game = {
     ...previous,

@@ -185,6 +185,14 @@ class WebDemo(unittest.TestCase):
         expect(p.get_by_role("heading", name="Depo", exact=True)).to_be_visible()
         p.goto(self.url + "#piyasa")
         expect(p.get_by_role("heading", name="Piyasa", exact=True)).to_be_visible()
+        # İlk ziyarette (service worker yokken) her ekranın yol biçimindeki doğrudan
+        # bağlantısı 404.html üzerinden açılmalı.
+        fresh = self.engine.launch(**self.options).new_context(service_workers="block")
+        self.addCleanup(fresh.close)
+        q = fresh.new_page()
+        for heading, slug in self.SLUGS.items():
+            q.goto(self.url + slug)
+            expect(q.get_by_role("heading", name=heading, exact=True)).to_be_visible()
         self.assertEqual(self.errors, [])
 
     def test_double_tap_buys_once_and_reset_needs_confirmation(self):
@@ -319,6 +327,8 @@ class WebDemo(unittest.TestCase):
         self.make_chairs()
         self.visit("Piyasa")
         expect(self.page.locator(".line").filter(has_text="Açık siparişlerin ihtiyacı")).to_be_visible()
+        # Siparişin ihtiyacı toptancıya satılamaz.
+        expect(self.page.get_by_role("button", name="Stok açık siparişler için tutuluyor")).to_be_disabled()
         self.visit("Siparişler")
         self.page.get_by_role("button", name="Stoktan ayır").click()
         self.visit("Piyasa")

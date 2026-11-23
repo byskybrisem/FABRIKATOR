@@ -191,7 +191,7 @@ let keepMessage = false;
 let selected: ProductId = "chair";
 try {
   const saved = localStorage.getItem("fabrikator:urun") as ProductId | null;
-  if (saved && catalog[saved]) selected = saved;
+  if (saved && Object.hasOwn(catalog, saved)) selected = saved;
 } catch {
   /* Tercih yalnız kolaylıktır. */
 }
@@ -906,7 +906,8 @@ function trade(g: Game, now: number) {
   const cards = openProducts(g).map((pid) => {
     const r = catalog[pid],
       q = market(g, now, pid),
-      n = Math.min(available(g, pid), q.demand);
+      // Açık siparişlerin ihtiyacı toptancı düğmelerine konmaz.
+      n = Math.min(spare(g, pid), q.demand);
     const tomorrow = market(
       { ...g, marketDay: 0 },
       Math.max(now, g.last) + nextDayIn(g, now),
@@ -981,15 +982,19 @@ function trade(g: Game, now: number) {
             "</div>"
           : button(
               "sell",
-              available(g, pid)
-                ? "Yeni günün teklifini bekle"
-                : "Satılacak " + r.short + " yok",
+              !available(g, pid)
+                ? "Satılacak " + r.short + " yok"
+                : !spare(g, pid)
+                  ? "Stok açık siparişler için tutuluyor"
+                  : "Yeni günün teklifini bekle",
               {
                 disabled: true,
                 product: pid,
-                hint: available(g, pid)
-                  ? "Bugünkü talep doldu."
-                  : "Önce üretim yapın.",
+                hint: !available(g, pid)
+                  ? "Önce üretim yapın."
+                  : !spare(g, pid)
+                    ? "Siparişleri teslim edin ya da fazlasını üretin."
+                    : "Bugünkü talep doldu.",
               },
             )),
     );
