@@ -1,7 +1,7 @@
 import { Text } from "react-native";
 import { useAtolye } from "../src/session";
 import { Action, Card, Line, Page, cash, s } from "../src/ui";
-import { duration, r } from "../src/workshop";
+import { cycle, r } from "../src/workshop";
 export default function Production() {
   const { g, now, execute } = useAtolye();
   return (
@@ -30,13 +30,21 @@ export default function Production() {
           </>
         ) : (
           <>
-            <Line label="Çevrim süresi" value={duration(g) / 1000 + " sn"} />
+            <Line
+              label="Hattaki çalışan"
+              value={
+                g.workers +
+                " · tek parti " +
+                cycle(g.level, 1, g.workers) / 1000 +
+                " sn"
+              }
+            />
             <Text style={s.label}>
               {!g.lots
                 ? "Depodan bir parti ham madde satın alın."
                 : !g.workers
-                  ? "Fabrikam ekranından montaj ustasını atayın."
-                  : "Bir çevrimde üreteceğiniz miktarı seçin."}
+                  ? "Fabrikam ekranından hatta çalışan atayın."
+                  : "Her parti için hatta en az bir çalışan gerekir."}
             </Text>
             {Array.from({ length: g.level }, (_, i) => i + 1).map((n) => (
               <Action
@@ -47,7 +55,7 @@ export default function Production() {
                   cash(n * (r.energy + r.packaging))
                 }
                 disabled={
-                  !g.workers ||
+                  g.workers < n ||
                   g.lots < n ||
                   g.cash < n * (r.energy + r.packaging)
                 }

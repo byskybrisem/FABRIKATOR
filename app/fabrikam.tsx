@@ -1,26 +1,59 @@
 import { Text } from "react-native";
 import { useAtolye } from "../src/session";
 import { Card, Page, Line, Action, cash, s } from "../src/ui";
-import { duration, profit, upgradePrice } from "../src/workshop";
+import {
+  cycle,
+  profit,
+  seats,
+  upgradePrice,
+  MAX_STAFF,
+  WAGE,
+} from "../src/workshop";
 export default function FactoryScreen() {
   const { g, execute } = useAtolye(),
-    p = upgradePrice(g);
+    p = upgradePrice(g),
+    idle = g.staff - g.workers,
+    n = seats(g.level);
   return (
     <Page title="Fabrikam">
-      <Card title="Montaj ustası">
-        <Line
-          label="Görev"
-          value={g.workers ? "Montaj hattı" : "Atama bekliyor"}
+      <Card title="Personel">
+        <Text style={s.label}>
+          Montaj çalışanları hattı işletir. Hattaki her çalışan çevrimi
+          hızlandırır; her çalışan hatta olmasa da günlük {cash(WAGE)} maaş
+          alır.
+        </Text>
+        <Line label="Toplam çalışan" value={g.staff + " / " + MAX_STAFF} />
+        <Line label="Hatta" value={g.workers + " / " + n} />
+        <Line label="Boşta" value={idle} />
+        <Line label="Günlük maaş" value={cash(g.staff * WAGE)} />
+        <Action
+          label={"Montaj çalışanı al · " + cash(WAGE)}
+          disabled={g.staff >= MAX_STAFF || g.cash < WAGE}
+          onPress={() => execute("hire")}
         />
         <Action
-          label={g.workers ? "Ustayı hattan al" : "Ustayı hatta ata"}
-          disabled={!!g.job}
+          label="Hatta ata"
+          disabled={!!g.job || !idle || g.workers >= n}
           onPress={() => execute("assign")}
         />
+        <Action
+          label="Hattan çek"
+          disabled={!!g.job || !g.workers}
+          onPress={() => execute("unassign")}
+        />
+        <Action
+          label="Boştaki çalışanı çıkar"
+          disabled={!idle}
+          onPress={() => execute("fire")}
+        />
       </Card>
-      <Card title={"Montaj makinesi · Seviye " + g.level}>
-        <Line label="Çevrim süresi" value={duration(g) / 1000 + " sn"} />
+      <Card title={"Montaj hattı · Seviye " + g.level}>
+        <Line
+          label="Tek parti süresi"
+          value={g.workers ? cycle(g.level, 1, g.workers) / 1000 + " sn" : "—"}
+        />
         <Line label="Çevrim kapasitesi" value={g.level * 10 + " sandalye"} />
+        <Line label="Hat koltuğu" value={n} />
         {g.level < 3 ? (
           <>
             <Line
@@ -28,8 +61,8 @@ export default function FactoryScreen() {
               value={cash(Math.max(0, profit(g) - g.investment))}
             />
             <Text style={s.label}>
-              Sonraki seviyede {10 * (g.level + 1)} sandalye{" "}
-              {60 / (g.level + 1)} saniyede üretilir.
+              Sonraki seviyede çevrimde {10 * (g.level + 1)} sandalye ve hatta{" "}
+              {seats(g.level + 1)} koltuk olur.
             </Text>
             <Action
               label={"Makineyi geliştir · " + cash(p)}

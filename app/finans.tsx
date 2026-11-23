@@ -1,10 +1,14 @@
 import { useAtolye } from "../src/session";
 import { Card, Line, Page, cash } from "../src/ui";
-import { profit } from "../src/workshop";
+import { profit, salesProfit } from "../src/workshop";
 const names: Record<string, string> = {
   opening: "Açılış",
   buy: "Ham madde",
-  assign: "Usta görevi",
+  assign: "Hatta atama",
+  unassign: "Hattan çekme",
+  hire: "Çalışan alındı · ilk gün maaşı",
+  fire: "Çalışan ayrıldı",
+  payroll: "Günlük maaş ödemesi",
   start: "Enerji ve paketleme",
   finish: "Mamul girişi",
   sell: "Net satış tahsilatı",
@@ -19,7 +23,9 @@ export default function Finance() {
         <Line label="Satılan ürün maliyeti" value={cash(g.cogs)} />
         <Line label="Nakliye" value={cash(g.freight)} />
         <Line label="Oyun vergisi" value={cash(g.tax)} />
-        <Line label="Sabit gider öncesi kazanç" value={cash(profit(g))} />
+        <Line label="Sabit gider öncesi kazanç" value={cash(salesProfit(g))} />
+        <Line label="İşçilik gideri" value={cash(g.wages)} />
+        <Line label="Faaliyet kârı" value={cash(profit(g))} />
       </Card>
       <Card title="Nakit ve yatırım">
         <Line label="Kasa" value={cash(g.cash)} />

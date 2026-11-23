@@ -19,16 +19,26 @@ Web sürümü mobil uygulamayla aynı `src/workshop.ts` ve `src/catalog.ts` kodu
 
 **Yayın:** Tek seferlik olarak GitHub'da **Settings → Pages → Build and deployment → Source → GitHub Actions** seçin. Pages kapalıyken yayın adımı `404 Ensure GitHub Pages has been enabled` hatası verir. `FABRIKATOR Web` iş akışı PR'larda doğrulama yapar. `main` güncellendiğinde doğrulama başarılıysa yalnızca `dist/site` yayımlanır. Pages sonradan açılırsa aynı iş akışı Actions sekmesinden `main` için elle çalıştırılabilir.
 
+## Çalışanlar ve montaj hattı
+
+- Atölye bir montaj çalışanıyla açılır. **Fabrikam** ekranında çalışan alınır, hatta atanır, hattan çekilir veya boştaki çalışan çıkarılır. Atölyede en fazla 6 çalışan olabilir.
+- Her çalışanın günlük maaşı 450 TL'dir. İşe alırken o günün maaşı peşin ödenir. Sonraki her oyun gününün başında bordrodaki herkesin maaşı kesilir, buna boşta bekleyenler de dahildir. Uygulama uzun süre kapalı kalırsa en fazla 3 günlük maaş kesilir. Kasa maaşa yetmezse ödenemeyen çalışanlar ayrılır, kasa eksiye düşmez.
+- Makine seviyesi hattaki koltuk sayısını (seviye + 1) ve bir çevrimde işlenebilecek parti sayısını (seviye) belirler. Her parti için hatta en az bir çalışan gerekir.
+- Çevrim süresi = 60 sn × parti ÷ (makine seviyesi × hattaki çalışan). Tek çalışan ve tek partiyle ilk çevrim yine 60 saniyedir.
+- Toptancı talebi gün sırasıyla 10, 30, 24, 40, 32 adettir. İlk gün değişmedi. Sonraki günlerin yüksek talebi, ek çalışanı ve makine yatırımını değerli kılar.
+- Finans ekranında satış kârı, işçilik gideri ve faaliyet kârı ayrı görünür. Makine yatırımı gider değil, varlıktır.
+- Eski kayıtlar (web v1 ve mobil SQLite) açılışta bir çalışanla taşınır. Geçmiş günler için maaş kesilmez.
+
 ## İlk on sandalye
 
 1. **Depo** ekranında 4.000 TL karşılığında 20 tahta ve 10 bağlantı seti alın. Kasa 146.000 TL olur.
-2. **Fabrikam** ekranında montaj ustasını hatta atayın.
+2. **Fabrikam** ekranında montaj çalışanını hatta atayın.
 3. **Üretim** ekranında 10 sandalye başlatın. Enerji 300 TL, paketleme 200 TL tutar. Kasa 145.500 TL olur. Bir dakika sonra 10 sandalye otomatik olarak depoya girer. Uygulama kapalıysa bitiş zamanı ilk açılışta işlenir.
 4. İlk oyun gününde **Piyasa** ekranındaki toptancıya 10 sandalyeyi 850 TL/adetten satın.
 5. **Finans** ekranında brüt gelir 8.500 TL, satılan mal maliyeti 4.500 TL, nakliye 300 TL, oyun vergisi 425 TL ve sabit gider öncesi kazanç 3.275 TL görünür. Kasa 153.275 TL olur.
-6. Hattı 3.000 TL birikmiş kazançla ikinci seviyeye yükseltin. İki parti ham maddeyle bir çevrimde 20 sandalye üretebilirsiniz. Süre 30 saniyeye iner.
+6. Hattı 3.000 TL birikmiş kazançla ikinci seviyeye yükseltin. Yeni bir çalışan alıp hatta atayın. İki çalışan ve iki parti ham maddeyle bir çevrimde 20 sandalye 30 saniyede üretilir.
 
-Bir oyun günü beş gerçek dakikadır. Günlük teklif ve talep beş günlük bir döngü izler. Toptancı, eldeki ve o gün istediği miktarın küçük olanını alır. İlk prototipteki kayıt aktarılırken başlangıç sermayesi farkı eklenir. Eldeki mal ve devam eden işlerin önceki maliyeti korunur.
+Bir oyun günü beş gerçek dakikadır. Günlük teklif ve talep beş günlük bir döngü izler; her yeni gün maaşlar kesilir. Toptancı, eldeki ve o gün istediği miktarın küçük olanını alır. İlk prototipteki kayıt aktarılırken başlangıç sermayesi farkı eklenir. Eldeki mal ve devam eden işlerin önceki maliyeti korunur.
 
 ## iPhone'da deneme
 
