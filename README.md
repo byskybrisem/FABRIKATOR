@@ -19,6 +19,22 @@ Web sürümü mobil uygulamayla aynı `src/workshop.ts` ve `src/catalog.ts` kodu
 
 **Yayın:** Tek seferlik olarak GitHub'da **Settings → Pages → Build and deployment → Source → GitHub Actions** seçin. Pages kapalıyken yayın adımı `404 Ensure GitHub Pages has been enabled` hatası verir. `FABRIKATOR Web` iş akışı PR'larda doğrulama yapar. `main` güncellendiğinde doğrulama başarılıysa yalnızca `dist/site` yayımlanır. Pages sonradan açılırsa aynı iş akışı Actions sekmesinden `main` için elle çalıştırılabilir.
 
+## Ürünler ve müşteri siparişleri
+
+- Katalog veridir (`src/catalog.ts`): malzemeler (tahta, bağlantı seti) ve ürünler. Yeni ürün eklemek motor kodu gerektirmez.
+- **Ahşap sandalye** baştan açıktır. **Yemek masası** (5'li parti, 120 sn, 2.600 TL) itibar 15'te açılır. **Ahşap raf** (8'li parti, 90 sn, 1.350 TL) makine seviyesi 2'de açılır.
+- Malzeme ürün bazında alınır, ortak depoda ortalama maliyetle tutulur. Mamul stoğu ürün bazındadır. Toptancının her ürün için ayrı günlük alım sınırı vardır.
+- Her oyun günü kurgusal şirketlerden teklifler gelir. Teklifler oyunun başlangıç zamanı ve günle tohumlanır, internet bağlantısı gerektirmez. İtibar 40'ta üçüncü, 75'te dördüncü teklif gelir. Bazı teklifler zararlıdır. Kartta vergi, nakliye ve üretim maliyeti sonrası tahmini net kazanç görünür.
+- **Siparişler** ekranında teklif kabul edilir, reddedilir ya da bir kez %10 yüksek karşı teklif verilir. Müşteri karşı teklifi ya kabul eder ya da çekilir. Aynı anda en fazla 4 sipariş açık olabilir.
+- Stok siparişe ayrılabilir. Ayrılan ürün toptancıya satılamaz. Teslimde bedel, %5 vergi ve nakliye ayrı muhasebeleşir, itibar artar. Stokta olmayan ürün teslim edilemez.
+- Teslim günü geçen sipariş bir kez iptal olur: bedelin %10'u ceza, itibar kaybı ve ayrılan stoğun serbest kalması. Kasa eksiye düşmez.
+- Kasası tükenen atölye, fazla malzemesini kayıtlı maliyetinin %60'ına elden çıkarabilir. Fark "stok değer kaybı" olarak gider yazılır. Bu yol, para ve çalışan kalmadığında oyunun kilitlenmesini önler.
+- Kayıt sürüm 3: tek ürünlü web (v1/v2) ve mobil SQLite kayıtları maliyeti kuruşu kuruşuna koruyarak taşınır.
+
+## Güncellemeler
+
+Yeni yayın service worker tarafından arka planda indirilir ve hemen devralır. Açık oyun zorla yenilenmez; **Güncelleme hazır · Güncelle** bildirimi çıkar. Ana ekrana eklenmiş uygulama bir sonraki açılışta yeni sürümle başlar. Sayfanın altındaki **Sürüm** etiketi derlemenin kimliğidir. Kayıt IndexedDB'de kalır, güncelleme onu silmez.
+
 ## Çalışanlar ve montaj hattı
 
 - Atölye bir montaj çalışanıyla açılır. **Fabrikam** ekranında çalışan alınır, hatta atanır, hattan çekilir veya boştaki çalışan çıkarılır. Atölyede en fazla 6 çalışan olabilir.
@@ -60,5 +76,5 @@ Metro sunucusundan bağımsız çevrimdışı deneme için Mac, Xcode ve iOS imz
 - `src/catalog.ts` oynanabilir sektörü, ürünü, reçeteyi ve temel fiyatları tanımlar.
 - `src/workshop.ts` ekonomi kurallarını kuruş cinsinden uygular. Stok maliyetini satış anında giderleştirir. Makine alımını yatırım olarak kaydeder.
 - `src/store.ts` her komutu kayıt sürümüyle doğrular ve oyun durumuyla nakit hareketini tek SQLite işlemi içinde yazar.
-- `npm test` gerçek SQLite üzerinde ekonomi, tekrar gönderim, çevrimdışı ilerleme, kayıt taşıma ve işlemi geri alma kontrollerini çalıştırır.
+- `npm test` gerçek SQLite üzerinde ekonomi, tekrar gönderim, çevrimdışı ilerleme, kayıt taşıma, işlemi geri alma, sipariş ve uzun rastgele simülasyon kontrollerini çalıştırır.
 - `npm run typecheck` ve `npx expo export --platform all` TypeScript ve iki mobil platform paketini denetler.

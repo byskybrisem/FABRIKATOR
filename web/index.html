@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-build="__BUILD__">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -23,15 +23,22 @@
       <div class="bar">
         <a class="brand" href="#panel"
           ><span class="mark" aria-hidden="true">F</span>FABRİKATÖR</a
-        ><div id="day"><span class="chip">Atölye açılıyor…</span></div>
+        >
+        <div id="day"><span class="chip">Atölye açılıyor…</span></div>
       </div>
     </header>
     <main>
+      <div id="update" class="update" role="status" hidden>
+        <span
+          ><b>Güncelleme hazır.</b> Yeni sürüm indirildi; kaydın korunur.</span
+        >
+        <button type="button">Güncelle</button>
+      </div>
       <div id="message" role="status"></div>
       <div id="screen" aria-busy="true"><p>Atölye kaydı açılıyor…</p></div>
       <footer>
         Oyun bu tarayıcıda kaydedilir. Site verilerini silersen ilerlemen
-        silinir.
+        silinir. <span id="build">Sürüm __BUILD__</span>
       </footer>
     </main>
     <nav aria-label="Oyun menüsü" id="nav"></nav>

@@ -16,6 +16,7 @@ export const routes = [
   ["Üretim", "/uretim"],
   ["Depo", "/depo"],
   ["Piyasa", "/piyasa"],
+  ["Siparişler", "/siparisler"],
   ["Finans", "/finans"],
 ] as const;
 export function Page({

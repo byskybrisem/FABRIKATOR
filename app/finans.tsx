@@ -9,6 +9,13 @@ const names: Record<string, string> = {
   hire: "Çalışan alındı · ilk gün maaşı",
   fire: "Çalışan ayrıldı",
   payroll: "Günlük maaş ödemesi",
+  expire: "Sözleşme cezası",
+  salvage: "Malzeme elden çıkarma",
+  accept: "Sipariş kabulü",
+  counter: "Karşı teklif",
+  decline: "Teklif reddi",
+  reserve: "Siparişe stok ayırma",
+  deliver: "Sipariş tahsilatı",
   start: "Enerji ve paketleme",
   finish: "Mamul girişi",
   sell: "Net satış tahsilatı",
@@ -25,6 +32,8 @@ export default function Finance() {
         <Line label="Oyun vergisi" value={cash(g.tax)} />
         <Line label="Sabit gider öncesi kazanç" value={cash(salesProfit(g))} />
         <Line label="İşçilik gideri" value={cash(g.wages)} />
+        <Line label="Sözleşme cezaları" value={cash(g.penalties)} />
+        <Line label="Stok değer kaybı" value={cash(g.writeoffs)} />
         <Line label="Faaliyet kârı" value={cash(profit(g))} />
       </Card>
       <Card title="Nakit ve yatırım">

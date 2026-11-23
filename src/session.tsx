@@ -8,11 +8,11 @@ import React, {
 import { AppState, Text, View, Button } from "react-native";
 import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
 import { openWorkshop, apply, resume, type Entry } from "./store";
-import { day, due, type Command, type Game } from "./workshop";
+import { day, due, type Arg, type Command, type Game } from "./workshop";
 type Session = {
   g: Game;
   now: number;
-  execute: (cmd: Command, qty?: number) => void;
+  execute: (cmd: Command, arg?: number | Arg) => void;
   log: Entry[];
   error: string;
 };
@@ -87,7 +87,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         )}
       </View>
     );
-  function execute(cmd: Command, qty = 1) {
+  function execute(cmd: Command, arg: number | Arg = {}) {
     if (!db || !g) return;
     try {
       const time = Date.now();
@@ -97,7 +97,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           "Yeni gün başladı. Güncel toptancı teklifini kontrol edin.",
         );
       }
-      show(db, apply(db, cmd, g.rev, time, qty));
+      show(db, apply(db, cmd, g.rev, time, arg));
       setNow(time);
       setError("");
     } catch (e) {

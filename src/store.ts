@@ -5,6 +5,7 @@ import {
   initial,
   upgradeGame,
   validate,
+  type Arg,
   type Command,
   type Game,
 } from "./workshop.ts";
@@ -32,14 +33,14 @@ function transaction<T>(db: DB, work: () => T) {
     throw error;
   }
 }
-function legacy(db: DB, now: number) {
-  const g = initial(now);
+function legacy(db: DB, now: number): Game {
+  const fresh = initial(now);
   if (
     !db.getFirstSync(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='workshop'",
     )
   )
-    return g;
+    return fresh;
   const old = db.getFirstSync<{
     cash: number;
     boards: number;
@@ -56,21 +57,32 @@ function legacy(db: DB, now: number) {
     old.profit !== old.sold * 5000
   )
     throw new Error("Önceki kayıt okunamadı.");
-  g.cash = old.cash + CAPITAL - 200000;
-  g.lots = old.kits / 10;
-  g.rawCost = g.lots * 100000;
-  g.chairs = old.chairs;
-  g.goodsCost = g.chairs * 13000;
-  g.sold = old.sold;
-  g.income = g.sold * 18000;
-  g.cogs = g.sold * 13000;
-  if (old.ready_at !== null) {
-    g.workers = 1;
-    g.ready = old.ready_at;
-    g.wip = 130000;
-    g.job = 10;
-  }
-  return g;
+  // İlk prototipin tablosu tek ürünlü biçime çevrilip ortak taşıma adımından geçer.
+  const lots = old.kits / 10;
+  const running = old.ready_at !== null;
+  return upgradeGame({
+    cash: old.cash + CAPITAL - 200000,
+    lots,
+    rawCost: lots * 100000,
+    chairs: old.chairs,
+    goodsCost: old.chairs * 13000,
+    workers: running ? 1 : 0,
+    level: 1,
+    job: running ? 10 : 0,
+    wip: running ? 130000 : 0,
+    ready: running ? old.ready_at : 0,
+    born: now,
+    last: now,
+    marketDay: 1,
+    taken: 0,
+    sold: old.sold,
+    income: old.sold * 18000,
+    cogs: old.sold * 13000,
+    tax: 0,
+    freight: 0,
+    investment: 0,
+    rev: 0,
+  });
 }
 export function read(db: DB) {
   const row = db.getFirstSync<{ data: string; revision: number }>(
@@ -126,7 +138,7 @@ export function apply(
   cmd: Command,
   rev: number,
   now = Date.now(),
-  qty = 1,
+  arg: number | Arg = {},
 ) {
   return transaction(db, () => {
     let prev = read(db);
@@ -142,7 +154,7 @@ export function apply(
       save(db, step, auto, step.cash - prev.cash);
       prev = step;
     }
-    const g = advance(prev, cmd, now, qty);
+    const g = advance(prev, cmd, now, arg);
     save(db, g, cmd, g.cash - prev.cash);
     return g;
   });

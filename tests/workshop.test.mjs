@@ -14,6 +14,7 @@ import {
   market,
   duration,
   cycle,
+  lotsOf,
   seats,
 } from "../src/workshop.ts";
 
@@ -41,17 +42,23 @@ function started(d) {
   assert.equal(g.cash, 14600000);
   g = apply(d, "assign", g.rev, 2);
   g = apply(d, "start", g.rev, 3);
-  assert.deepEqual([g.cash, g.wip, g.lots, g.chairs], [14550000, 450000, 0, 0]);
+  assert.deepEqual(
+    [g.cash, g.wip, lotsOf(g), g.goods.chair.qty],
+    [14550000, 450000, 0, 0],
+  );
   return g;
 }
 test("ilk satış: iki kez harcama yok; 8500 gelir, 425 vergi, 300 nakliye ve 3275 TL kazanç", (t) => {
   const d = db(t);
   let g = started(d);
   g = resume(d, g.ready);
-  assert.deepEqual([g.chairs, g.goodsCost, g.wip], [10, 450000, 0]);
+  assert.deepEqual(
+    [g.goods.chair.qty, g.goods.chair.cost, g.wip],
+    [10, 450000, 0],
+  );
   g = apply(d, "sell", g.rev, g.last, 10);
   assert.deepEqual(
-    [g.chairs, g.cash, g.income, g.cogs, g.tax, g.freight, profit(g)],
+    [g.goods.chair.qty, g.cash, g.income, g.cogs, g.tax, g.freight, profit(g)],
     [0, 15327500, 850000, 450000, 42500, 30000, 327500],
   );
   assert.equal(
@@ -67,14 +74,14 @@ test("kapalı geçen süre, tamamlanma sınırı ve tekrar açılış tek teslim
   const b = db(t, path);
   assert.deepEqual(openWorkshop(b, g.ready - 1), g);
   const done = openWorkshop(b, g.ready + DAY);
-  assert.equal(done.chairs, 10);
+  assert.equal(done.goods.chair.qty, 10);
   assert.equal(done.ready, 0);
   // Ertesi günün maaşı bir kez kesilir; aynı gün yeniden açmak hiçbir şeyi değiştirmez.
   assert.equal(done.cash, 14550000 - WAGE);
   assert.deepEqual(openWorkshop(b, g.ready + DAY + 1000), done);
   const later = openWorkshop(b, g.ready + 2 * DAY);
   assert.deepEqual(
-    [later.chairs, later.cash, later.wages],
+    [later.goods.chair.qty, later.cash, later.wages],
     [10, done.cash - WAGE, 2 * WAGE],
   );
 });
@@ -94,7 +101,7 @@ test("aynı sürümle iki bağlantıdan verilen sipariş ve satış bir kez işl
   const sale = apply(a, "sell", g.rev, g.last, 6);
   assert.throws(() => apply(b, "sell", g.rev, g.last, 6));
   assert.equal(market(sale, sale.last).demand, 4);
-  assert.equal(sale.chairs, 4);
+  assert.equal(sale.goods.chair.qty, 4);
 });
 test("usta, kapasite, zaman ve günlük talep; ilk kazançla yeni makine", (t) => {
   const d = db(t);
@@ -124,7 +131,7 @@ test("usta, kapasite, zaman ve günlük talep; ilk kazançla yeni makine", (t) =
   assert.throws(() => apply(d, "sell", g.rev, g.last, 1));
   assert.deepEqual(market(g, DAY), { day: 2, price: 89250, demand: 30 });
   g = apply(d, "sell", g.rev, DAY, 20);
-  assert.equal(g.chairs, 0);
+  assert.equal(g.goods.chair.qty, 0);
   assert.equal(market(g, DAY).demand, 10);
 });
 test("yetersiz kasa ham maddeyi eksiye düşürmez", (t) => {
@@ -159,7 +166,7 @@ test("ilk prototipin süren işi, eski maliyeti ve geçmiş kârı taşınır", 
   assert.equal(g.job, 10);
   assert.equal(profit(g), 50000);
   assert.equal(g.cash, 14920000);
-  assert.equal(resume(d, 60000).goodsCost, 130000);
+  assert.equal(resume(d, 60000).goods.chair.cost, 130000);
 });
 
 test("çalışan al, hatta ata, koltuk ve atölye sınırı; boştaki çalışan ayrılır", (t) => {
@@ -245,7 +252,7 @@ test("çalışan sistemi öncesi mobil kayıt bir usta ile taşınır ve geçmi�
   g = read(d);
   assert.deepEqual([g.staff, g.workers, g.wages, g.paidDay], [1, 1, 0, 1]);
   g = resume(d, g.ready);
-  assert.equal(g.chairs, 10);
+  assert.equal(g.goods.chair.qty, 10);
   assert.equal(
     JSON.parse(d.getFirstSync("SELECT data FROM factory_save").data).staff,
     1,
@@ -280,5 +287,5 @@ test("yeni günde biten üretim, maaşı kendi satırında gösterir", (t) => {
     ["payroll", -WAGE],
     ["finish", 0],
   ]);
-  assert.equal(g.chairs, 10);
+  assert.equal(g.goods.chair.qty, 10);
 });
