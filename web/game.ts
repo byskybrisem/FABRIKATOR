@@ -1024,8 +1024,10 @@ screen.addEventListener("click", async (event) => {
   if (!target || target.disabled || busy || !state) return;
   const cmd = target.dataset.cmd as Exclude<Command, "finish" | "payroll">;
   const tapTime = performance.now();
-  if (cmd === lastTap.command && tapTime - lastTap.at < 450) return;
-  lastTap = { command: cmd, at: tapTime };
+  // Aynı düğmeye çift dokunma yok sayılır; farklı miktar ayrı bir karardır.
+  const key = cmd + ":" + target.dataset.qty;
+  if (key === lastTap.command && tapTime - lastTap.at < 450) return;
+  lastTap = { command: key, at: tapTime };
   busy = true;
   target.disabled = true;
   try {
