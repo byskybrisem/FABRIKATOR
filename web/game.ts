@@ -990,8 +990,10 @@ async function reset() {
   try {
     state = await resetSave(db);
     broken = false;
+    keepMessage = location.hash !== "#panel";
     location.hash = "panel";
     message.textContent = "Yeni oyun başladı.";
+    message.dataset.tone = "ok";
     channel?.postMessage(state.game.rev);
   } catch {
     message.textContent =
@@ -1053,9 +1055,12 @@ screen.addEventListener("click", async (event) => {
     else render();
   }
 });
+let keepMessage = false;
 window.addEventListener("hashchange", () => {
   if (state && !broken) {
-    message.textContent = "";
+    // Yeni oyunun onay mesajı, kendi tetiklediği ekran değişiminde silinmez.
+    if (!keepMessage) message.textContent = "";
+    keepMessage = false;
     render();
     window.scrollTo(0, 0);
   }
