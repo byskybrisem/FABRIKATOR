@@ -160,6 +160,10 @@ class WebDemo(unittest.TestCase):
             for view in ["Ana panel","Depo","Üretim","Piyasa","Fabrikam","Finans"]:
                 self.visit(view)
                 self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= innerWidth"))
+        # Kart içindeki plan başlıkları sayfa başlığının yapışkan stilini almaz.
+        self.page.set_viewport_size({"width":440,"height":956})
+        self.visit("Üretim")
+        self.assertEqual(self.page.locator(".plan header").first.evaluate("e => getComputedStyle(e).position"), "static")
         manifest=self.page.request.get(self.url+"manifest.webmanifest").json()
         self.assertEqual(manifest["start_url"], "./")
         self.assertEqual(self.page.request.get(self.url+manifest["icons"][0]["src"]).status, 200)
