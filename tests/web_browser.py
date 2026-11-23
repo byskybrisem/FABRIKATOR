@@ -86,21 +86,30 @@ class WebDemo(unittest.TestCase):
           db.close(); return all;
         }""")
 
+    SLUGS = {"Ana panel": "panel", "Fabrikam": "fabrikam", "Depo": "depo", "Üretim": "uretim", "Piyasa": "piyasa", "Siparişler": "siparisler", "Finans": "finans", "Şirketim": "sirket"}
+
     def visit(self, name):
-        self.page.get_by_role("navigation").get_by_role("link", name=name, exact=True).click()
+        self.page.goto(self.url + "#" + self.SLUGS[name])
         expect(self.page.get_by_role("heading", name=name, exact=True)).to_be_visible()
+
+    def set_game(self, change):
+        """Kayıtlı oyunu doğrudan düzenler (ör. bilinen bir teklif koymak için) ve sayfayı yeniler."""
+        saved = self.stored()["1"]
+        change(saved["game"])
+        self.put_raw(saved)
+        self.page.reload()
 
     def check_stat(self, label, value):
         expect(self.page.locator(".line").filter(has=self.page.get_by_text(label, exact=True)).locator("dd")).to_have_text(value)
 
     def check_tile(self, label, value):
-        expect(self.page.locator(".card .stat").filter(has=self.page.locator("> span", has_text=label)).locator("strong")).to_have_text(value)
+        expect(self.page.locator(".stat").filter(has=self.page.locator("> span", has_text=label)).locator("strong")).to_have_text(value)
 
     def test_workshop_with_closed_tab_and_offline_reload(self):
         p = self.page
         expect(p.locator(".chip.cash")).to_have_text("150.000 TL")
         self.visit("Depo")
-        p.get_by_role("button", name="Bir parti al").click()
+        p.get_by_role("button", name="Ahşap sandalye partisi al").click()
         self.check_tile("Tahta","20 adet")
         self.visit("Fabrikam")
         p.get_by_role("button", name="Hatta ata").click()
@@ -157,7 +166,7 @@ class WebDemo(unittest.TestCase):
     def test_layout_and_home_screen_manifest(self):
         for width in [320,375,440,768,1440]:
             self.page.set_viewport_size({"width":width,"height":900})
-            for view in ["Ana panel","Depo","Üretim","Piyasa","Fabrikam","Finans"]:
+            for view in ["Ana panel","Depo","Üretim","Piyasa","Siparişler","Fabrikam","Finans","Şirketim"]:
                 self.visit(view)
                 self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= innerWidth"))
         # Kart içindeki plan başlıkları sayfa başlığının yapışkan stilini almaz.
@@ -176,12 +185,20 @@ class WebDemo(unittest.TestCase):
         expect(p.get_by_role("heading", name="Depo", exact=True)).to_be_visible()
         p.goto(self.url + "#piyasa")
         expect(p.get_by_role("heading", name="Piyasa", exact=True)).to_be_visible()
+        # İlk ziyarette (service worker yokken) her ekranın yol biçimindeki doğrudan
+        # bağlantısı 404.html üzerinden açılmalı.
+        fresh = self.engine.launch(**self.options).new_context(service_workers="block")
+        self.addCleanup(fresh.close)
+        q = fresh.new_page()
+        for heading, slug in self.SLUGS.items():
+            q.goto(self.url + slug)
+            expect(q.get_by_role("heading", name=heading, exact=True)).to_be_visible()
         self.assertEqual(self.errors, [])
 
     def test_double_tap_buys_once_and_reset_needs_confirmation(self):
         p = self.page
         self.visit("Depo")
-        p.get_by_role("button", name="Bir parti al").dblclick()
+        p.get_by_role("button", name="Ahşap sandalye partisi al").dblclick()
         self.check_tile("Tahta", "20 adet")
         p.reload()
         self.check_tile("Tahta", "20 adet")
@@ -213,7 +230,7 @@ class WebDemo(unittest.TestCase):
         expect(p.locator(".chip.cash")).to_have_text("150.000 TL")
         saved = self.stored()
         self.assertEqual([saved[k] for k in saved if k.startswith("yedek-")], [bad])
-        self.assertEqual(saved["1"]["version"], 2)
+        self.assertEqual(saved["1"]["version"], 3)
 
     def test_back_to_back_resets_keep_the_played_save(self):
         result = self.page.evaluate("""async () => {
@@ -223,10 +240,10 @@ class WebDemo(unittest.TestCase):
           const t=Date.now();
           await resetSave(db,t); await resetSave(db,t);
           const backups=await new Promise(ok=>{const out=[];const c=db.transaction('workshop').objectStore('workshop').openCursor();
-            c.onsuccess=()=>{const cur=c.result; if(!cur) return ok(out); if(String(cur.key).startsWith('yedek-')) out.push(cur.value.game.lots); cur.continue();};});
+            c.onsuccess=()=>{const cur=c.result; if(!cur) return ok(out); if(String(cur.key).startsWith('yedek-')) out.push(cur.value.game.materials.board.qty); cur.continue();};});
           db.close(); return backups;
         }""")
-        self.assertEqual(result, [1])
+        self.assertEqual(result, [20])
 
     def test_hiring_and_crew_change_cycle_and_wages(self):
         p = self.page
@@ -244,7 +261,7 @@ class WebDemo(unittest.TestCase):
         expect(p.get_by_role("button", name="Hatta ata")).to_be_disabled()
         expect(p.get_by_role("button", name="Boştaki çalışanı çıkar")).to_be_disabled()
         self.check_tile("Tek parti süresi", "30 sn")
-        self.visit("Depo"); p.get_by_role("button", name="Bir parti al").click()
+        self.visit("Depo"); p.get_by_role("button", name="Ahşap sandalye partisi al").click()
         self.visit("Üretim"); p.get_by_role("button", name="10 sandalye üret").click()
         self.check_stat("Depoya giriş", "30 sn")
         self.visit("Finans")
@@ -264,20 +281,132 @@ class WebDemo(unittest.TestCase):
 
     def test_version_one_save_migrates_with_one_worker(self):
         p = self.page
-        self.visit("Depo"); p.get_by_role("button", name="Bir parti al").click()
+        self.visit("Depo"); p.get_by_role("button", name="Ahşap sandalye partisi al").click()
         self.check_tile("Tahta", "20 adet")
         old = self.stored()["1"]
-        for key in ("staff", "wages", "paidDay"):
-            del old["game"][key]
+        # Sürüm 1: çalışan sistemi ve çok ürün öncesi tek ürünlü kayıt.
+        game = old["game"]
+        for key in ("staff", "wages", "paidDay", "materials", "goods", "jobProduct", "penalties", "writeoffs", "rep", "offerDay", "offers", "orders", "delivered"):
+            del game[key]
+        game.update(lots=1, rawCost=400000, chairs=0, goodsCost=0, taken=0)
         old["version"] = 1
         self.put_raw(old)
         p.reload()
         self.visit("Fabrikam")
         self.check_tile("Toplam çalışan", "1 / 6")
         saved = self.stored()["1"]
-        self.assertEqual(saved["version"], 2)
-        self.assertEqual([saved["game"][k] for k in ("staff", "workers", "wages", "lots")], [1, 0, 0, 1])
+        self.assertEqual(saved["version"], 3)
+        self.assertEqual([saved["game"][k] for k in ("staff", "workers", "wages")], [1, 0, 0])
+        self.assertEqual(saved["game"]["materials"]["board"], {"qty": 20, "cost": 300000})
         self.assertEqual(self.errors, [])
+
+    OFFER = {"id": "1-0", "customer": 0, "product": "chair", "qty": 10, "price": 950000, "shipping": 40000, "rep": 3, "dueDay": 2, "ceiling": 1100000}
+
+    def make_chairs(self):
+        p = self.page
+        self.visit("Depo"); p.get_by_role("button", name="Ahşap sandalye partisi al").click()
+        self.check_tile("Tahta", "20 adet")
+        self.visit("Fabrikam"); p.get_by_role("button", name="Hatta ata").click()
+        self.check_tile("Hatta", "1 / 2")
+        self.visit("Üretim"); p.get_by_role("button", name="10 sandalye üret").click()
+        self.check_stat("Üretimde", "10 sandalye")
+        p.close()
+        self.page = self.open(self.start + timedelta(seconds=61), "#depo", "Depo")
+        self.check_stat("Ahşap sandalye", "10 adet")
+
+    def test_customer_order_accept_produce_deliver(self):
+        self.set_game(lambda g: g.update(offers=[self.OFFER]))
+        p = self.page
+        self.visit("Siparişler")
+        offer = p.locator(".offer").filter(has_text="Marmara Mobilya AŞ")
+        expect(offer.locator(".line").filter(has_text="Tahmini net kazanç").locator("dd")).to_have_text("+4.125 TL")
+        offer.get_by_role("button", name="Kabul et").click()
+        expect(p.locator(".order").filter(has_text="Marmara Mobilya AŞ")).to_be_visible()
+        expect(p.get_by_role("button", name="Teslim et")).to_be_disabled()
+        p.wait_for_timeout(500)
+        self.make_chairs()
+        self.visit("Piyasa")
+        expect(self.page.locator(".line").filter(has_text="Açık siparişlerin ihtiyacı")).to_be_visible()
+        # Siparişin ihtiyacı toptancıya satılamaz.
+        expect(self.page.get_by_role("button", name="Stok açık siparişler için tutuluyor")).to_be_disabled()
+        self.visit("Siparişler")
+        self.page.get_by_role("button", name="Stoktan ayır").click()
+        self.visit("Piyasa")
+        expect(self.page.get_by_role("button", name="Satılacak sandalye yok")).to_be_disabled()
+        self.visit("Siparişler")
+        self.page.get_by_role("button", name="Teslim et").click()
+        expect(self.page.locator("#message")).to_contain_text("teslim edildi")
+        self.check_tile("İtibar", "13 / 100")
+        self.visit("Finans")
+        self.check_stat("Satış geliri", "9.500 TL")
+        self.check_stat("Nakliye", "−400 TL")
+        self.check_stat("Oyun vergisi", "−475 TL")
+        self.check_stat("Kasa", "154.125 TL")
+        self.page.reload()
+        self.check_stat("Kasa", "154.125 TL")
+        self.assertEqual(self.errors, [])
+
+    def test_relocked_product_stock_stays_sellable(self):
+        # İtibar cezayla 15'in altına düşerse masa üretimi kilitlenir ama depodaki masalar satılabilir.
+        def stock(g):
+            g["cash"] -= 640000
+            g["goods"]["table"] = {"qty": 5, "cost": 640000, "reserved": 0}
+            g["rep"] = 10
+        self.set_game(stock)
+        self.visit("Piyasa")
+        card = self.page.locator(".card").filter(has=self.page.get_by_role("heading", name="Yemek masası"))
+        card.get_by_role("button", name="3 masayı sat").click()
+        expect(self.page.locator("#message")).to_have_text("Satış tamamlandı, tahsilat kasada.")
+        self.visit("Üretim")
+        expect(self.page.get_by_role("button", name="Yemek masası")).to_be_disabled()
+
+    def test_counter_offer_outcomes_and_declines(self):
+        low = dict(self.OFFER, id="1-1", customer=1, ceiling=960000)
+        self.set_game(lambda g: g.update(offers=[self.OFFER, low]))
+        p = self.page
+        self.visit("Siparişler")
+        p.locator(".offer").filter(has_text="Marmara Mobilya AŞ").get_by_role("button", name="Karşı teklif").click()
+        expect(p.locator("#message")).to_have_text("Müşteri karşı teklifi kabul etti; sipariş açıldı.")
+        expect(p.locator(".order").locator(".line").filter(has_text="Sözleşme bedeli").locator("dd")).to_have_text("10.450 TL")
+        p.locator(".offer").filter(has_text="Ege Ev Dekorasyon").get_by_role("button", name="Karşı teklif").click()
+        expect(p.locator("#message")).to_contain_text("tekliften çekildi")
+        expect(p.locator(".offer")).to_have_count(0)
+        saved = self.stored()["1"]["game"]
+        self.assertEqual([o["id"] for o in saved["orders"]], ["1-0"])
+        self.assertEqual(saved["offers"], [])
+
+    def test_new_build_shows_update_and_keeps_the_save(self):
+        import shutil
+        site = Path(self.temp.name) / "guncel"
+        shutil.copytree(Path("dist/site").resolve(), site / "FABRIKATOR")
+        handler = partial(QuietHandler, directory=str(site))
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_port}/FABRIKATOR/"
+        p = self.context.new_page()
+        p.clock.set_fixed_time(self.start)
+        p.goto(url)
+        expect(p.get_by_role("heading", name="Ana panel")).to_be_visible()
+        p.evaluate("() => navigator.serviceWorker.ready")
+        p.wait_for_function("!!navigator.serviceWorker.controller")
+        old = p.locator("#build").inner_text()
+        p.goto(url + "#depo")
+        p.get_by_role("button", name="Ahşap sandalye partisi al").click()
+        expect(p.locator(".card .stat").filter(has=p.locator("> span", has_text="Tahta")).locator("strong")).to_have_text("20 adet")
+        # Yeni yayın: çalışan ve sayfa yeni sürüm kimliği taşır.
+        root = site / "FABRIKATOR"
+        sw = (root / "sw.js").read_text()
+        (root / "sw.js").write_text(sw.replace('const name = prefix + "', 'const name = prefix + "yeni-'))
+        index = (root / "index.html").read_text()
+        (root / "index.html").write_text(index.replace(old, "Sürüm yeni-surum"))
+        p.evaluate("() => navigator.serviceWorker.getRegistration().then((r) => r.update())")
+        expect(p.locator("#update")).to_be_visible(timeout=15000)
+        p.get_by_role("button", name="Güncelle").click()
+        expect(p.locator("#build")).to_have_text("Sürüm yeni-surum", timeout=15000)
+        p.goto(url + "#depo")
+        expect(p.locator(".card .stat").filter(has=p.locator("> span", has_text="Tahta")).locator("strong")).to_have_text("20 adet")
 
     def test_newer_save_version_is_not_overwritten(self):
         newer = {"version": 99, "game": {}, "log": []}
@@ -290,7 +419,7 @@ class WebDemo(unittest.TestCase):
         a = self.page
         b = self.open(self.start, "#depo", "Depo")
         self.visit("Depo")
-        a.get_by_role("button", name="Bir parti al").click()
+        a.get_by_role("button", name="Ahşap sandalye partisi al").click()
         # The other tab refreshes from the broadcast instead of keeping old stock.
         expect(b.locator(".card .stat").filter(has=b.locator("> span", has_text="Tahta")).locator("strong")).to_have_text("20 adet")
         result = a.evaluate("""async () => {
@@ -300,7 +429,7 @@ class WebDemo(unittest.TestCase):
           const errs=[];
           try { await transact(db,{command:'buy',revision:0,born:before.born}); } catch(e){ errs.push(e.message); }
           const after=(await transact(db)).game; db.close();
-          return {errs, cash:after.cash, lots:after.lots};
+          return {errs, cash:after.cash, lots:after.materials.board.qty};
         }""")
         self.assertEqual(result["cash"], 15000000)
         self.assertEqual(result["lots"], 0)
@@ -308,7 +437,7 @@ class WebDemo(unittest.TestCase):
 
     def test_finish_once_across_reloads_and_clock_rollback(self):
         p = self.page
-        self.visit("Depo"); p.get_by_role("button", name="Bir parti al").click()
+        self.visit("Depo"); p.get_by_role("button", name="Ahşap sandalye partisi al").click()
         self.visit("Fabrikam"); p.get_by_role("button", name="Hatta ata").click()
         self.visit("Üretim"); p.get_by_role("button", name="10 sandalye üret").click()
         self.check_stat("Üretimde", "10 sandalye")  # committed before the tab closes

@@ -22,15 +22,34 @@ const worker = await readFile(
   "utf8",
 );
 hash.update(worker);
+const version = hash.digest("hex").slice(0, 16);
 await writeFile(
   new URL("sw.js", out),
   worker
-    .replace("__VERSION__", hash.digest("hex").slice(0, 16))
+    .replace("__VERSION__", version)
     .replace("__FILES__", JSON.stringify(files)),
+);
+// Görünür sürüm etiketi: sayfa ve çalışan aynı kimliği taşır; yayında hangi sürümün
+// yüklü olduğu buradan doğrulanır.
+const stamp = version.slice(0, 8);
+const page = await readFile(new URL("index.html", out), "utf8");
+await writeFile(
+  new URL("index.html", out),
+  page.replaceAll("__BUILD__", stamp),
 );
 // GitHub Pages serves 404.html for unknown paths. Turn /FABRIKATOR/depo into
 // /FABRIKATOR/#depo without hard-coding the repository name.
-const pages = ["panel", "fabrikam", "uretim", "depo", "piyasa", "finans"];
+// web/game.ts içindeki `routes` ile aynı olmalı; test her ekranın doğrudan bağlantısını dener.
+const pages = [
+  "panel",
+  "fabrikam",
+  "depo",
+  "uretim",
+  "piyasa",
+  "siparisler",
+  "finans",
+  "sirket",
+];
 await writeFile(
   new URL("404.html", out),
   `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FABRİKATÖR</title><script>

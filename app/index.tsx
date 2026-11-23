@@ -3,13 +3,14 @@ import { router } from "expo-router";
 import { Factory } from "../src/Factory";
 import { useAtolye } from "../src/session";
 import { Action, cash, Line, Page, routes, s } from "../src/ui";
+import { available, lotsOf, products } from "../src/workshop";
 export default function Dashboard() {
   const { g, now } = useAtolye();
   const next = g.job
     ? routes[1]
-    : g.chairs
+    : products.some((p) => available(g, p))
       ? routes[3]
-      : !g.lots
+      : !lotsOf(g, "chair")
         ? routes[2]
         : !g.workers
           ? routes[0]
@@ -20,7 +21,13 @@ export default function Dashboard() {
         <Text style={s.h2}>Mobilya atölyesi</Text>
         <Factory
           stage={
-            g.job ? "collect" : g.chairs ? "sell" : g.lots ? "start" : "buy"
+            g.job
+              ? "collect"
+              : products.some((p) => available(g, p))
+                ? "sell"
+                : lotsOf(g, "chair")
+                  ? "start"
+                  : "buy"
           }
           pulse={Math.floor(now / 500)}
         />
@@ -37,9 +44,9 @@ export default function Dashboard() {
           label={
             g.job
               ? "Üretimi izle"
-              : g.chairs
+              : products.some((p) => available(g, p))
                 ? "Toptancı teklifine git"
-                : !g.lots
+                : !lotsOf(g, "chair")
                   ? "Ham madde satın al"
                   : !g.workers
                     ? "Çalışanı hatta ata"

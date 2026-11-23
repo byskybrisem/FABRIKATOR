@@ -1,26 +1,57 @@
+import { useState } from "react";
 import { Text } from "react-native";
 import { useAtolye } from "../src/session";
 import { Action, Card, Line, Page, cash, s } from "../src/ui";
-import { cycle, r } from "../src/workshop";
+import {
+  catalog,
+  cycle,
+  lockReason,
+  lotsOf,
+  products,
+  type ProductId,
+} from "../src/workshop";
 export default function Production() {
   const { g, now, execute } = useAtolye();
+  const [product, setProduct] = useState<ProductId>("chair");
+  const r = catalog[product],
+    locked = lockReason(g, product);
   return (
     <Page title="Üretim">
-      <Card title="Ahşap sandalye">
-        <Line label="10 adet için ham madde" value={cash(r.materials)} />
+      <Card title="Ürün">
+        {products.map((p) => (
+          <Action
+            key={p}
+            label={
+              (p === product ? "● " : "") +
+              catalog[p].name +
+              (lockReason(g, p) ? " · " + lockReason(g, p) : "")
+            }
+            disabled={!!lockReason(g, p)}
+            onPress={() => setProduct(p)}
+          />
+        ))}
+      </Card>
+      <Card title={r.name}>
+        <Line
+          label={r.batch + " adet için ham madde"}
+          value={cash(r.materials)}
+        />
         <Line
           label="Enerji / paketleme"
           value={cash(r.energy) + " / " + cash(r.packaging)}
         />
         <Line
           label="Birim maliyet"
-          value={cash((r.materials + r.energy + r.packaging) / 10)}
+          value={cash((r.materials + r.energy + r.packaging) / r.batch)}
         />
       </Card>
       <Card title={g.job ? "Hat çalışıyor" : "Üretim emri"}>
         {g.job ? (
           <>
-            <Line label="Üretilen miktar" value={g.job} />
+            <Line
+              label="Üretilen"
+              value={g.job + " " + catalog[g.jobProduct || "chair"].name}
+            />
             <Line
               label="Depoya giriş"
               value={
@@ -35,31 +66,36 @@ export default function Production() {
               value={
                 g.workers +
                 " · tek parti " +
-                cycle(g.level, 1, g.workers) / 1000 +
+                cycle(g.level, 1, g.workers, product) / 1000 +
                 " sn"
               }
             />
             <Text style={s.label}>
-              {!g.lots
-                ? "Depodan bir parti ham madde satın alın."
-                : !g.workers
-                  ? "Fabrikam ekranından hatta çalışan atayın."
-                  : "Her parti için hatta en az bir çalışan gerekir."}
+              {locked
+                ? locked
+                : !lotsOf(g, product)
+                  ? "Depodan bu ürün için malzeme satın alın."
+                  : !g.workers
+                    ? "Fabrikam ekranından hatta çalışan atayın."
+                    : "Her parti için hatta en az bir çalışan gerekir."}
             </Text>
             {Array.from({ length: g.level }, (_, i) => i + 1).map((n) => (
               <Action
                 key={n}
                 label={
-                  n * 10 +
-                  " sandalye üret · " +
+                  n * r.batch +
+                  " " +
+                  r.name.toLowerCase() +
+                  " üret · " +
                   cash(n * (r.energy + r.packaging))
                 }
                 disabled={
+                  !!locked ||
                   g.workers < n ||
-                  g.lots < n ||
+                  lotsOf(g, product) < n ||
                   g.cash < n * (r.energy + r.packaging)
                 }
-                onPress={() => execute("start", n)}
+                onPress={() => execute("start", { product, qty: n })}
               />
             ))}
           </>

@@ -1,4 +1,8 @@
-import { seats, type Game } from "../src/workshop.ts";
+import { products, seats, type Game } from "../src/workshop.ts";
+
+/** Sahnedeki palet yığını (≈20 tahta) ve mamul adedi. */
+const pallets = (g: Game) => Math.ceil(g.materials.board.qty / 20);
+const finished = (g: Game) => products.reduce((n, p) => n + g.goods[p].qty, 0);
 
 // Hafif izometrik atölye sahnesi. Oyun durumundan her çizimde yeniden üretilir;
 // harici görsel veya kütüphane kullanmaz.
@@ -188,7 +192,7 @@ export function scene(g: Game, running: boolean) {
   for (let i = 0; i < idle; i++)
     out.push(person(18 + i * 9, 150, "#6b7f86", "idle"));
   // Ham madde paletleri (en fazla 4 yığın görünür).
-  const stacks = Math.min(g.lots, 4);
+  const stacks = Math.min(pallets(g), 4);
   for (let i = 0; i < 4; i++) {
     const y = 12 + i * 28;
     out.push(box(10, y, 0, 30, 22, 4, pallet));
@@ -243,7 +247,7 @@ export function scene(g: Game, running: boolean) {
   const lamp = iso(px + 14, 46, 42 + g.level * 6);
   const lampColor = running
     ? "#7fd36a"
-    : g.workers && g.lots
+    : g.workers && pallets(g)
       ? "#e6b84a"
       : "#e0634a";
   out.push(
@@ -276,8 +280,8 @@ export function scene(g: Game, running: boolean) {
         ),
       );
   }
-  // Mamul alanı: koli yığınları (her koli ~5 sandalye).
-  const cartons = Math.min(Math.ceil(g.chairs / 5), 12);
+  // Mamul alanı: koli yığınları (her koli ~5 ürün).
+  const cartons = Math.min(Math.ceil(finished(g) / 5), 12);
   for (let i = 0; i < cartons; i++) {
     const col = i % 3,
       row = Math.floor(i / 3) % 2,
@@ -288,7 +292,7 @@ export function scene(g: Game, running: boolean) {
   }
   // Yükleme rampası ve kamyon: satılacak mal varsa rampaya yanaşır.
   out.push(box(226, 104, 0, 10, 52, 6, dark));
-  if (g.chairs > 0) {
+  if (finished(g) > 0) {
     out.push(box(238, 104, 4, 62, 50, 34, ["#e9edec", "#a9b3b2", "#c9d1d0"]));
     out.push(box(300, 108, 4, 22, 42, 26, ["#2f8c87", "#1d5a57", "#257370"]));
     const w1 = iso(252, 154, 3),
@@ -314,9 +318,9 @@ function describe(g: Game, running: boolean) {
     " çalışan, boşta " +
     (g.staff - g.workers) +
     ", " +
-    g.lots +
-    " parti ham madde, " +
-    g.chairs +
-    " sandalye"
+    g.materials.board.qty +
+    " tahta, " +
+    finished(g) +
+    " mamul"
   );
 }

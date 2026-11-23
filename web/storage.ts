@@ -5,8 +5,10 @@ import {
   initial,
   upgradeGame,
   validate,
+  type Arg,
   type Game,
   type Command,
+  type ProductId,
 } from "../src/workshop.ts";
 
 export type Entry = {
@@ -15,14 +17,17 @@ export type Entry = {
   movement: number;
 };
 /** Bump when the stored shape changes and add a step to `migrate`. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export type Save = { version: number; game: Game; log: Entry[] };
 type Input = {
-  command: Exclude<Command, "finish" | "payroll">;
+  command: Exclude<Command, "finish" | "payroll" | "expire">;
   revision: number;
   /** `game.born` of the save the player was looking at; rejects actions from before a reset. */
   born?: number;
   quantity?: number;
+  product?: ProductId;
+  /** Teklif veya sipariş kimliği. */
+  id?: string;
   quoteDay?: number;
 };
 
@@ -69,7 +74,7 @@ function migrate(raw: unknown): Save {
     throw new CorruptSave("Atölye kaydı eksik.");
   let game: Game;
   try {
-    // v1 → v2: çalışan sistemi alanları eklenir; eski tek usta bordroda kalır.
+    // v1/v2 → v3: çalışan sistemi ve çok ürünlü stok; eski tek usta bordroda kalır.
     game = upgradeGame(save.game);
     validate(game);
   } catch (error) {
@@ -124,8 +129,8 @@ export function transact(
         // Biten üretim ve yeni günün maaşı, oyuncunun işleminden önce ayrı satırlar olarak işlenir.
         let g = game;
         const entries: Entry[] = [];
-        const run = (command: Command, quantity?: number) => {
-          const updated = advance(g, command, now, quantity);
+        const run = (command: Command, arg: Arg = {}) => {
+          const updated = advance(g, command, now, arg);
           entries.unshift({
             revision: updated.rev,
             kind: command,
@@ -134,7 +139,12 @@ export function transact(
           g = updated;
         };
         for (let auto = due(g, now); auto; auto = due(g, now)) run(auto);
-        if (input) run(input.command, input.quantity);
+        if (input)
+          run(input.command, {
+            qty: input.quantity,
+            product: input.product,
+            id: input.id,
+          });
         next = entries.length
           ? {
               version: SAVE_VERSION,
