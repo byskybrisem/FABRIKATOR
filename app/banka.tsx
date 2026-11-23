@@ -1,4 +1,5 @@
-import { Alert, Text } from "react-native";
+import { Text } from "react-native";
+import { askLoan } from "../src/consent";
 import { useAtolye } from "../src/session";
 import { Action, Card, Line, Page, cash, s } from "../src/ui";
 import {
@@ -14,29 +15,8 @@ export default function Bank() {
   const { g, execute } = useAtolye();
   const c = credit(g),
     limit = creditLimit(g);
-  function borrow(kind: LoanKind, amount: number) {
-    const q = loanQuote(g, kind, amount);
-    Alert.alert(
-      loanProducts[kind].name,
-      "Tutar: " +
-        cash(q.amount) +
-        "\nToplam faiz: " +
-        cash(q.interest) +
-        "\nToplam geri ödeme: " +
-        cash(q.total) +
-        "\nVade: " +
-        q.days +
-        " oyun günü",
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Onayla",
-          onPress: () =>
-            execute("borrow", { loan: kind, qty: amount, quote: q.total }),
-        },
-      ],
-    );
-  }
+  const borrow = (kind: LoanKind, amount: number) =>
+    askLoan(loanQuote(g, kind, amount), execute, "borrow");
   return (
     <Page title="Banka">
       <Card title="Hesaplar">

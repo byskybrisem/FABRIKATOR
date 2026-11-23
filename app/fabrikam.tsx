@@ -1,4 +1,5 @@
 import { Text } from "react-native";
+import { askLoan } from "../src/consent";
 import { useAtolye } from "../src/session";
 import { Card, Page, Line, Action, cash, s } from "../src/ui";
 import {
@@ -77,10 +78,7 @@ export default function FactoryScreen() {
               }
               disabled={!!g.job || !!loanQuote(g, "leasing", p).reason}
               onPress={() =>
-                execute("upgrade", {
-                  loan: "leasing",
-                  quote: loanQuote(g, "leasing", p).total,
-                })
+                askLoan(loanQuote(g, "leasing", p), execute, "upgrade")
               }
             />
           </>
