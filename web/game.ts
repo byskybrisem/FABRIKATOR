@@ -120,7 +120,7 @@ function panel(g: Game) {
           '">' +
           icon(k) +
           routes[k] +
-          '<span aria-hidden="true">↗</span></a>',
+          '<span aria-hidden="true">›</span></a>',
       )
       .join("") +
     "</div>"

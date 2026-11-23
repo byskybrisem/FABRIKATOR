@@ -21,25 +21,27 @@ class WebDemo(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = TemporaryDirectory()
         (Path(cls.temp.name) / "FABRIKATOR").symlink_to(Path("dist/site").resolve())
-        handler = partial(QuietHandler, directory=cls.temp.name)
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
-        cls.url = f"http://127.0.0.1:{cls.server.server_port}/FABRIKATOR/"
         cls.pw = sync_playwright().start()
         engine = os.environ.get("BROWSER", "webkit")
         options = {"executable_path": os.environ["CHROMIUM_PATH"]} if engine == "chromium" and os.environ.get("CHROMIUM_PATH") else {}
-        cls.browser = getattr(cls.pw, engine).launch(**options)
+        cls.engine = getattr(cls.pw, engine)
+        cls.options = options
 
     @classmethod
     def tearDownClass(cls):
-        cls.browser.close()
         cls.pw.stop()
-        cls.server.shutdown()
-        cls.server.server_close()
         cls.temp.cleanup()
 
     def setUp(self):
-        self.context = self.browser.new_context(viewport={"width":440,"height":956}, has_touch=True, is_mobile=True)
+        handler = partial(QuietHandler, directory=self.temp.name)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_port}/FABRIKATOR/"
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        profile = TemporaryDirectory()
+        self.addCleanup(profile.cleanup)
+        self.context = self.engine.launch_persistent_context(profile.name, viewport={"width":440,"height":956}, has_touch=True, is_mobile=True, **self.options)
         self.addCleanup(self.context.close)
         self.errors = []
         self.start = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -77,7 +79,9 @@ class WebDemo(unittest.TestCase):
         p.evaluate("() => navigator.serviceWorker.ready")
         p.wait_for_function("!!navigator.serviceWorker.controller")
         p.close()
-        self.context.set_offline(True)
+        # Stop the origin itself: both engines must now load from the installed worker.
+        self.server.shutdown()
+        self.server.server_close()
         self.page = self.open(self.start + timedelta(seconds=61))
         self.visit("Depo")
         self.check_stat("Ahşap sandalye","10 adet")
