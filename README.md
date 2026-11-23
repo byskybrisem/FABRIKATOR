@@ -2,6 +2,16 @@
 
 Türkçe, çevrimdışı bir iOS ve Android atölye simülasyonu. Expo Router ile Ana Panel, Fabrikam, Üretim, Depo, Piyasa ve Finans ekranları arasında gezilir. Oyuncu küçük bir mobilya atölyesi ve 150.000 TL ile başlar.
 
+## Safari web demosu
+
+GitHub Pages dağıtım adresi [FABRİKATÖR web demosu](https://byskybrisem.github.io/FABRIKATOR/). Safari’de ilk kez internet bağlantısıyla açın. **Paylaş → Ana Ekrana Ekle** ile oyunu kaydedebilirsiniz. İlk yüklemede oyun dosyaları önbelleğe alındıktan sonra çevrimdışı oynanabilir. Tarayıcı veya ana ekran uygulaması kendine ait bir yerel kayıt kullanabilir. Oyuna başladığınız yerden devam edin. Site verilerini temizlemek ilerlemeyi siler.
+
+Web sürümü mobil uygulamayla aynı `src/workshop.ts` ve `src/catalog.ts` kodunu kullanır. Tarayıcıda stok, kasa ve son hareketler tek IndexedDB işlemiyle kaydedilir. Mobil sürüm SQLite kullanır. İki sürüm arasında kayıt aktarımı yoktur.
+
+**Geliştirme:** Node.js 24 ile `npm ci && npm run build:web` çalıştırın. `dist/site` statik site köküdür. Tarayıcı testleri bu siteyi yalnızca yerel bir sunucunun `/FABRIKATOR/` alt dizininde açar. Python ortamında `pip install playwright==1.62.0`, ardından `python -m playwright install --with-deps webkit chromium` çalıştırın. `python tests/web_browser.py` ve `BROWSER=chromium python tests/web_browser.py` iki motoru ayrı ayrı doğrular.
+
+**Yayın:** GitHub'da **Settings → Pages → Source → GitHub Actions** seçin. `FABRIKATOR Web` iş akışı PR'larda doğrulama yapar. `main` güncellendiğinde doğrulama başarılıysa yalnızca `dist/site` yayımlanır. Pages sonradan açılırsa aynı iş akışı Actions sekmesinden `main` için elle çalıştırılabilir.
+
 ## İlk on sandalye
 
 1. **Depo** ekranında 4.000 TL karşılığında 20 tahta ve 10 bağlantı seti alın. Kasa 146.000 TL olur.
