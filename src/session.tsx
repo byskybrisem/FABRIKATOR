@@ -8,7 +8,7 @@ import React, {
 import { AppState, Text, View, Button } from "react-native";
 import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
 import { openWorkshop, apply, resume, type Entry } from "./store";
-import { day, type Command, type Game } from "./workshop";
+import { day, due, type Command, type Game } from "./workshop";
 type Session = {
   g: Game;
   now: number;
@@ -56,7 +56,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const tick = () => {
       const time = Date.now();
       setNow(time);
-      if (g.ready && time >= g.ready) {
+      // Biten üretim veya yeni günün maaşı bekliyorsa kayda işlenir.
+      if (due(g, time)) {
         try {
           show(db, resume(db, time));
         } catch {

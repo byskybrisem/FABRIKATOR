@@ -1,7 +1,9 @@
 import {
   advance,
   CAPITAL,
+  due,
   initial,
+  upgradeGame,
   validate,
   type Command,
   type Game,
@@ -75,7 +77,8 @@ export function read(db: DB) {
     "SELECT data,revision FROM factory_save WHERE id=1",
   );
   if (!row) throw new Error("Atölye kaydı eksik.");
-  const game: Game = JSON.parse(row.data);
+  // Çalışan sistemi öncesindeki kayıtlar okunurken tamamlanır; ilk işlemde yeni biçimle yazılır.
+  const game: Game = upgradeGame(JSON.parse(row.data));
   validate(game);
   if (game.rev !== row.revision) throw new Error("Atölye sürümü tutarsız.");
   return game;
@@ -126,20 +129,36 @@ export function apply(
   qty = 1,
 ) {
   return transaction(db, () => {
-    const prev = read(db);
+    let prev = read(db);
     if (prev.rev !== rev)
       throw new Error("Bu işlem zaten işlendi. Güncel kaydı kontrol edin.");
+    // Biten üretim ve yeni günün maaşı, oyuncunun işleminden önce ayrı satırlar olarak yazılır.
+    for (
+      let auto = due(prev, now);
+      auto && auto !== cmd;
+      auto = due(prev, now)
+    ) {
+      const step = advance(prev, auto, now);
+      save(db, step, auto, step.cash - prev.cash);
+      prev = step;
+    }
     const g = advance(prev, cmd, now, qty);
-    db.runSync(
-      "UPDATE factory_save SET revision=?,data=? WHERE id=1",
-      g.rev,
-      JSON.stringify(g),
-    );
-    record(db, g, cmd, g.cash - prev.cash);
+    save(db, g, cmd, g.cash - prev.cash);
     return g;
   });
 }
+function save(db: DB, g: Game, kind: string, movement: number) {
+  db.runSync(
+    "UPDATE factory_save SET revision=?,data=? WHERE id=1",
+    g.rev,
+    JSON.stringify(g),
+  );
+  record(db, g, kind, movement);
+}
 export function resume(db: DB, now = Date.now()) {
-  const g = read(db);
-  return g.job && now >= g.ready ? apply(db, "finish", g.rev, now) : g;
+  let g = read(db);
+  // Önce biten üretim, ardından bekleyen günlerin maaşı işlenir.
+  for (let cmd = due(g, now); cmd; cmd = due(g, now))
+    g = apply(db, cmd, g.rev, now);
+  return g;
 }

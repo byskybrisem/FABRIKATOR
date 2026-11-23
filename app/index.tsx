@@ -26,6 +26,10 @@ export default function Dashboard() {
         />
         <Line label="Kasa" value={cash(g.cash)} />
         <Line
+          label="Personel"
+          value={g.workers + " hatta · " + (g.staff - g.workers) + " boşta"}
+        />
+        <Line
           label="Montaj hattı"
           value={g.job ? g.job + " sandalye üretimde" : "Boş"}
         />
@@ -38,7 +42,7 @@ export default function Dashboard() {
                 : !g.lots
                   ? "Ham madde satın al"
                   : !g.workers
-                    ? "Usta görevlendir"
+                    ? "Çalışanı hatta ata"
                     : "Üretim emri ver"
           }
           onPress={() => router.push(next[1])}
