@@ -166,10 +166,13 @@ function payroll(g: Game, today: number) {
   }
   g.paidDay = today;
 }
-/** Bekleyen otomatik işlem: biten üretim ya da yeni günün maaşı. */
+/**
+ * Bekleyen otomatik işlem. Yeni günün maaşı önce gelir: aksi halde maaş, aynı
+ * adımda biten üretimin hareketine karışır ve defterde ayrı görünmez.
+ */
 export function due(g: Game, now: number): Command | undefined {
-  if (g.job && now >= g.ready) return "finish";
   if (g.paidDay < day(g, now)) return "payroll";
+  if (g.job && now >= g.ready) return "finish";
   return undefined;
 }
 function need(ok: boolean, message: string) {

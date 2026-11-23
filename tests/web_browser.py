@@ -189,6 +189,7 @@ class WebDemo(unittest.TestCase):
         p.once("dialog", lambda d: d.accept())
         p.get_by_role("button", name="Yeni oyun başlat").click()
         expect(p.get_by_role("heading", name="Ana panel")).to_be_visible()
+        expect(p.locator("#message")).to_have_text("Yeni oyun başladı.")
         expect(p.locator(".chip.cash")).to_have_text("150.000 TL")
         backups = [k for k in self.stored() if k.startswith("yedek-")]
         self.assertEqual(len(backups), 1)
