@@ -66,8 +66,8 @@ svg {
   flex: none;
 }
 
-/* Üst çubuk */
-header {
+/* Üst çubuk (yalnız sayfa başlığı; kart içi <header> etkilenmez) */
+body > header {
   position: sticky;
   top: 0;
   z-index: 3;
