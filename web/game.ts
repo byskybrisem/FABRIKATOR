@@ -9,7 +9,13 @@ import {
   type Command,
   type Game,
 } from "../src/workshop.ts";
-import { openSave, transact, type Save } from "./storage.ts";
+import {
+  CorruptSave,
+  openSave,
+  resetSave,
+  transact,
+  type Save,
+} from "./storage.ts";
 
 const routes = {
   panel: "Ana panel",
@@ -286,6 +292,11 @@ function contents(view: Page, g: Game, now: number) {
             "</dl>",
         ) +
         card(
+          "Kayıt",
+          "<p>İlerleme yalnızca bu tarayıcıda saklanır; bulut yedeği yoktur. Safari site verilerini silerse kayıt da silinir.</p>" +
+            '<button class="secondary" data-act="reset">Yeni oyun başlat</button>',
+        ) +
+        card(
           "Son hareketler",
           "<dl>" +
             state.log
@@ -324,25 +335,73 @@ function timers(now: number) {
     remaining = document.getElementById("remaining"),
     progress = document.querySelector<HTMLProgressElement>("#progress"),
     quote = document.getElementById("quote-time");
-  if (remaining) remaining.textContent = secs(g.ready - now) + " sn";
-  if (progress) progress.value = duration(g) - Math.max(0, g.ready - now);
+  // A clock moved backwards must not show more than one cycle; the engine still
+  // waits for the real finish time, exactly like the mobile save.
+  const left = Math.min(duration(g), Math.max(0, g.ready - now));
+  if (remaining) remaining.textContent = secs(left) + " sn";
+  if (progress) progress.value = duration(g) - left;
   if (quote)
     quote.textContent =
       secs(g.born + shownDay * DAY - Math.max(now, g.last)) + " sn";
+}
+let broken = false;
+function recovery(reason: string) {
+  broken = true;
+  nav.innerHTML = "";
+  dayLabel.textContent = "Kayıt sorunu";
+  screen.innerHTML =
+    "<h1>Kayıt açılamadı</h1>" +
+    card(
+      "Atölye kaydı doğrulanamadı",
+      "<p>" +
+        reason +
+        "</p><p>Kayıt silinmedi. Yeni oyun başlatırsan mevcut kayıt bu tarayıcıda yedek olarak saklanır.</p>" +
+        '<button data-act="reset">Kaydı yedekle, yeni oyun başlat</button>',
+    );
+  screen.setAttribute("aria-busy", "false");
 }
 async function refresh() {
   if (!db || busy) return;
   busy = true;
   try {
     state = await transact(db);
+    broken = false;
     render();
-  } catch {
-    message.textContent = "Yerel kayıt okunamadı. Sayfayı yeniden açmayı dene.";
+  } catch (error) {
+    if (error instanceof CorruptSave) recovery(error.message);
+    else
+      message.textContent =
+        error instanceof Error
+          ? error.message
+          : "Yerel kayıt okunamadı. Sayfayı yeniden açmayı dene.";
   } finally {
     busy = false;
   }
 }
+async function reset() {
+  const warning = broken
+    ? "Okunamayan kayıt yedeklenecek ve 150.000 TL ile yeni bir atölye açılacak. Devam edilsin mi?"
+    : "Mevcut ilerlemen silinecek ve 150.000 TL ile yeni bir atölye açılacak. Bu işlem geri alınamaz. Devam edilsin mi?";
+  if (!window.confirm(warning)) return;
+  busy = true;
+  try {
+    state = await resetSave(db);
+    broken = false;
+    location.hash = "panel";
+    message.textContent = "Yeni oyun başladı.";
+    channel?.postMessage(state.game.rev);
+  } catch {
+    message.textContent = "Yeni oyun başlatılamadı. Sayfayı yenileyip tekrar dene.";
+  } finally {
+    busy = false;
+    if (!broken) render();
+  }
+}
 screen.addEventListener("click", async (event) => {
+  const act = (event.target as HTMLElement).closest<HTMLButtonElement>(
+    "button[data-act='reset']",
+  );
+  if (act && !busy && db) return void reset();
   const target = (event.target as HTMLElement).closest<HTMLButtonElement>(
     "button[data-cmd]",
   );
@@ -357,6 +416,7 @@ screen.addEventListener("click", async (event) => {
     state = await transact(db, {
       command: cmd,
       revision: state.game.rev,
+      born: state.game.born,
       quantity: Number(target.dataset.qty),
       quoteDay: shownDay,
     });
@@ -367,16 +427,18 @@ screen.addEventListener("click", async (event) => {
       error instanceof Error ? error.message : "İşlem kaydedilemedi.";
     try {
       state = await transact(db);
-    } catch {
+    } catch (reload) {
+      if (reload instanceof CorruptSave) broken = true;
       message.textContent = "Yerel kayıt okunamadı.";
     }
   } finally {
     busy = false;
-    render();
+    if (broken) recovery("Kayıt doğrulanamadı.");
+    else render();
   }
 });
 window.addEventListener("hashchange", () => {
-  if (state) {
+  if (state && !broken) {
     message.textContent = "";
     render();
     window.scrollTo(0, 0);
@@ -386,16 +448,27 @@ window.addEventListener("pageshow", () => void refresh());
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) void refresh();
 });
+// A direct link such as /FABRIKATOR/depo (served by 404.html or the offline worker)
+// becomes the equivalent in-app route so reloading never needs a server.
+function routeFromPath() {
+  const parts = location.pathname.split("/");
+  const last = parts.pop()?.toLowerCase() ?? "";
+  if (Object.hasOwn(routes, last))
+    history.replaceState(null, "", parts.join("/") + "/#" + last);
+}
 async function start() {
   try {
+    routeFromPath();
     db = await openSave();
     await refresh();
+    if (state && state.log.length > 1)
+      message.textContent = "Kayıtlı atölyen yüklendi. Kaldığın yerden devam et.";
     if ("BroadcastChannel" in window) {
       channel = new BroadcastChannel("fabrikator-workshop");
       channel.onmessage = () => void refresh();
     }
     window.setInterval(() => {
-      if (!state || busy || document.hidden) return;
+      if (!state || busy || broken || document.hidden) return;
       const now = Date.now(),
         g = state.game;
       if (g.ready && now >= g.ready) void refresh();

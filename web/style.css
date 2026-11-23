@@ -175,6 +175,11 @@ button {
 .cta span {
   font-size: 1.25em;
 }
+button.secondary {
+  background: transparent;
+  color: #f0b4a4;
+  box-shadow: inset 0 0 0 1.5px #a5543f;
+}
 button:disabled {
   background: #35413b;
   color: #b3beb6;
