@@ -149,8 +149,16 @@ export function resetSave(db: IDBDatabase, now = Date.now()): Promise<Save> {
     tx.onabort = () => reject(tx.error ?? new Error("Yeni oyun başlatılamadı."));
     tx.oncomplete = () => resolve(next);
     request.onsuccess = () => {
-      if (request.result !== undefined)
-        store.put(request.result, "yedek-" + now);
+      const raw: unknown = request.result;
+      let pristine = false;
+      try {
+        pristine = raw !== undefined && migrate(raw).game.rev === 0;
+      } catch {
+        // Unreadable saves are always backed up.
+      }
+      // A unique key: two resets in the same millisecond must not replace the first backup.
+      if (raw !== undefined && !pristine)
+        store.add(raw, "yedek-" + now + "-" + Math.random().toString(36).slice(2, 10));
       store.put(next, SLOT);
     };
   });

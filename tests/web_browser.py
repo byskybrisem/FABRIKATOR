@@ -207,6 +207,19 @@ class WebDemo(unittest.TestCase):
         self.assertEqual([saved[k] for k in saved if k.startswith("yedek-")], [bad])
         self.assertEqual(saved["1"]["version"], 1)
 
+    def test_back_to_back_resets_keep_the_played_save(self):
+        result = self.page.evaluate("""async () => {
+          const {openSave,transact,resetSave}=await import('./web/storage.js');
+          const db=await openSave(); let g=(await transact(db)).game;
+          g=(await transact(db,{command:'buy',revision:g.rev})).game;
+          const t=Date.now();
+          await resetSave(db,t); await resetSave(db,t);
+          const backups=await new Promise(ok=>{const out=[];const c=db.transaction('workshop').objectStore('workshop').openCursor();
+            c.onsuccess=()=>{const cur=c.result; if(!cur) return ok(out); if(String(cur.key).startsWith('yedek-')) out.push(cur.value.game.lots); cur.continue();};});
+          db.close(); return backups;
+        }""")
+        self.assertEqual(result, [1])
+
     def test_newer_save_version_is_not_overwritten(self):
         newer = {"version": 99, "game": {}, "log": []}
         self.put_raw(newer)
