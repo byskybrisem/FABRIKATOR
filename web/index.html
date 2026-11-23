@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#101719" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <title>FABRİKATÖR · Mobilya atölyesi</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon.png" />
+    <link rel="icon" href="./icon.png" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <a class="brand" href="#panel"
+          ><span class="mark" aria-hidden="true">F</span>FABRİKATÖR</a
+        ><span id="day">Atölye açılıyor…</span>
+      </div>
+    </header>
+    <main>
+      <div id="message" role="status"></div>
+      <div id="screen" aria-busy="true"><p>Atölye kaydı açılıyor…</p></div>
+      <footer>
+        Oyun bu tarayıcıda kaydedilir. Site verilerini silersen ilerlemen
+        silinir.
+      </footer>
+    </main>
+    <nav aria-label="Oyun menüsü" id="nav"></nav>
+    <script type="module" src="./web/game.js"></script>
+  </body>
+</html>
