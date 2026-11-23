@@ -1,14 +1,22 @@
 import {
   catalog,
   customers,
+  loanProducts,
   materials,
   products,
+  type LoanKind,
   type MaterialId,
   type ProductId,
   type Recipe,
 } from "./catalog.ts";
-export type { ProductId, MaterialId, Recipe } from "./catalog.ts";
-export { catalog, customers, materials, products } from "./catalog.ts";
+export type { ProductId, MaterialId, Recipe, LoanKind } from "./catalog.ts";
+export {
+  catalog,
+  customers,
+  loanProducts,
+  materials,
+  products,
+} from "./catalog.ts";
 
 export const r = catalog.chair;
 export const CAPITAL = 15000000;
@@ -28,6 +36,14 @@ export const COUNTER_PERCENT = 10;
 export const START_REP = 10;
 /** Fazla malzeme kayıtlı maliyetinin bu yüzdesine elden çıkarılır. */
 export const SALVAGE_PERCENT = 60;
+/** Aynı anda açık olabilecek en fazla kredi. */
+export const MAX_LOANS = 3;
+/** Bu notun altında yeni kredi verilmez. */
+export const MIN_SCORE = 400;
+/** Banka mevduatına günlük faiz (baz puan). Kredi faizinin her zaman altındadır. */
+export const DEPOSIT_BPS = 20;
+/** Ödenemeyen taksitte taksit tutarının bu yüzdesi gecikme bedeli olarak borca eklenir. */
+export const LATE_FEE_PERCENT = 5;
 
 export type Command =
   | "buy"
@@ -46,9 +62,36 @@ export type Command =
   | "deliver"
   | "finish"
   | "payroll"
-  | "expire";
+  | "expire"
+  | "deposit"
+  | "withdraw"
+  | "borrow"
+  | "repay"
+  | "bank";
 /** İşlem bağımsız değişkeni: miktar (parti veya adet), ürün ve teklif/sipariş kimliği. */
-export type Arg = { qty?: number; product?: ProductId; id?: string };
+export type Arg = {
+  qty?: number;
+  product?: ProductId;
+  id?: string;
+  /** Kredi türü (kredi kullanımı veya finansmanlı makine geliştirme). */
+  loan?: LoanKind;
+  /** Oyuncunun onayladığı toplam geri ödeme; koşullar değiştiyse işlem reddedilir. */
+  quote?: number;
+};
+export type Loan = {
+  id: string;
+  kind: LoanKind;
+  /** Kullandırılan anapara. */
+  principal: number;
+  /** Kalan anapara (borç); gecikme bedelleri buraya eklenir. */
+  balance: number;
+  /** Kalan planlı faiz (henüz gider yazılmadı, borç değildir). */
+  interestLeft: number;
+  /** Kalan taksit sayısı (işlenen oyun günü). */
+  left: number;
+  /** Üst üste ödenemeyen taksit. */
+  missed: number;
+};
 
 export type Stock = { qty: number; cost: number };
 export type Goods = Stock & { reserved: number };
@@ -109,6 +152,20 @@ export type Game = {
   offers: Offer[];
   orders: Order[];
   delivered: number;
+  /** Banka mevduatı (kasa ile transfer gelir/gider değildir). */
+  bank: number;
+  loans: Loan[];
+  /** Ödenen kredi faizi (gider). */
+  interest: number;
+  /** Borca eklenen gecikme bedelleri (gider). */
+  lateFees: number;
+  /** Mevduat faizi geliri. */
+  interestIncome: number;
+  /** Zamanında ödenen ve ödenemeyen taksit sayıları (kredi notu geçmişi). */
+  onTime: number;
+  late: number;
+  /** Banka gününün (mevduat faizi, taksit) işlendiği son oyun günü. */
+  bankDay: number;
   rev: number;
 };
 
@@ -147,6 +204,14 @@ export function initial(now: number): Game {
     offers: [],
     orders: [],
     delivered: 0,
+    bank: 0,
+    loans: [],
+    interest: 0,
+    lateFees: 0,
+    interestIncome: 0,
+    onTime: 0,
+    late: 0,
+    bankDay: 1,
     rev: 0,
   };
   g.offers = generateOffers(g, 1);
@@ -155,12 +220,19 @@ export function initial(now: number): Game {
 
 /** Satıştan kalan: gelir − satılan malın maliyeti − vergi − nakliye. */
 export const salesProfit = (g: Game) => g.income - g.cogs - g.tax - g.freight;
+/** Faaliyet kârı: işçilik, sözleşme cezaları ve stok değer kaybı düşülür. */
+export const operatingProfit = (g: Game) =>
+  salesProfit(g) - g.wages - g.penalties - g.writeoffs;
 /**
- * Faaliyet kârı: işçilik, sözleşme cezaları ve stok değer kaybı düşülür.
- * Makine yatırımı gider değildir.
+ * Net kâr: faaliyet kârı − faiz − gecikme bedeli + mevduat faizi. Kredi anaparası ve
+ * kasa–banka transferi kâr değildir; makine yatırımı gider değildir.
  */
 export const profit = (g: Game) =>
-  salesProfit(g) - g.wages - g.penalties - g.writeoffs;
+  operatingProfit(g) - g.interest - g.lateFees + g.interestIncome;
+/** Toplam kredi borcu (kalan anapara + eklenen gecikme bedelleri). */
+export const debt = (g: Game) => g.loans.reduce((s, l) => s + l.balance, 0);
+/** Özkaynak: başlangıç sermayesi + birikmiş net kâr. */
+export const equity = (g: Game) => CAPITAL + profit(g);
 export const day = (g: Game, now: number) =>
   1 + Math.floor((Math.max(g.last, now) - g.born) / DAY);
 
@@ -338,6 +410,17 @@ export function upgradeGame(raw: unknown): Game {
       ? generateOffers(g as Game, g.offerDay)
       : [];
   }
+  if (g.bank === undefined) {
+    // Banka öncesi kayıt: hesap boş, kredi yok; banka günü maaş günüyle başlar.
+    g.bank = 0;
+    g.loans = [];
+    g.interest = 0;
+    g.lateFees = 0;
+    g.interestIncome = 0;
+    g.onTime = 0;
+    g.late = 0;
+    g.bankDay = g.paidDay;
+  }
   return g as Game;
 }
 
@@ -366,6 +449,13 @@ const scalars: (keyof Game)[] = [
   "rep",
   "offerDay",
   "delivered",
+  "bank",
+  "interest",
+  "lateFees",
+  "interestIncome",
+  "onTime",
+  "late",
+  "bankDay",
   "rev",
 ];
 export function validate(g: Game) {
@@ -374,6 +464,7 @@ export function validate(g: Game) {
   };
   if (typeof g !== "object" || g === null) bad();
   for (const key of scalars) if (!int(g[key])) bad();
+  validateLoans(g);
   if (
     typeof g.materials !== "object" ||
     typeof g.goods !== "object" ||
@@ -454,9 +545,179 @@ export function validate(g: Game) {
     (job && (g.job > job.batch * g.level || g.job % job.batch !== 0)) ||
     !!g.job !== !!g.ready ||
     !!g.job !== !!g.wip ||
-    g.cash + stockValue(g) + g.wip + g.investment !== CAPITAL + profit(g)
+    g.bankDay > day(g, g.last) ||
+    g.cash + g.bank + stockValue(g) + g.wip + g.investment !==
+      CAPITAL + profit(g) + debt(g)
   )
     bad("Atölye kaydındaki bakiye veya stok doğrulanamadı.");
+}
+function validateLoans(g: Game) {
+  if (!Array.isArray(g.loans) || g.loans.length > MAX_LOANS)
+    throw new Error("Atölye kaydı tutarsız.");
+  for (const l of g.loans) {
+    if (
+      !l ||
+      typeof l.id !== "string" ||
+      !Object.hasOwn(loanProducts, l.kind) ||
+      !(
+        ["principal", "balance", "interestLeft", "left", "missed"] as const
+      ).every((k) => int(l[k])) ||
+      l.left < 1 ||
+      l.balance < 1
+    )
+      throw new Error("Atölye kaydı tutarsız.");
+  }
+  if (new Set(g.loans.map((l) => l.id)).size !== g.loans.length)
+    throw new Error("Atölye kaydı tutarsız.");
+}
+
+// ── Banka ve kredi ────────────────────────────────────────────────────────────
+
+/** Kasadan, yetmezse bankadan öder. Yetmiyorsa hiçbir şey ödemez ve false döner. */
+function pay(g: Game, amount: number) {
+  if (g.cash + g.bank < amount) return false;
+  const fromCash = Math.min(g.cash, amount);
+  g.cash -= fromCash;
+  g.bank -= amount - fromCash;
+  return true;
+}
+/** Banka gününün işleyecek bir şeyi var mı (kredi veya mevduat)? */
+const bankActive = (g: Game) => g.loans.length > 0 || g.bank > 0;
+/** Varlıklar: kasa, banka, stoklar, yarı mamul ve makine yatırımı. */
+export const assets = (g: Game) =>
+  g.cash + g.bank + stockValue(g) + g.wip + g.investment;
+/**
+ * Açıklanabilir kredi notu (0–1000): her kalem ve puanı ayrı döner.
+ * Oyuna özgü, kurgusal bir puandır.
+ */
+export function credit(g: Game) {
+  const p = profit(g);
+  const ratio = debt(g) / Math.max(1, assets(g));
+  const parts: [string, number][] = [
+    ["Başlangıç puanı", 600],
+    ["Zamanında ödenen taksit", Math.min(150, g.onTime * 6)],
+    ["Geciken taksit", -Math.min(400, g.late * 40)],
+    [
+      "Kârlılık",
+      p >= 0
+        ? Math.min(120, Math.round((p * 120) / CAPITAL))
+        : -Math.min(150, Math.round((-p * 150) / CAPITAL)),
+    ],
+    ["Borç / varlık oranı", -Math.round(ratio * 250)],
+    ["Teslim edilen sipariş", Math.min(60, g.delivered * 3)],
+    ["Takipteki kredi", -120 * g.loans.filter((l) => l.missed > 0).length],
+  ];
+  const score = Math.max(
+    0,
+    Math.min(
+      1000,
+      parts.reduce((s, [, v]) => s + v, 0),
+    ),
+  );
+  return { score, parts };
+}
+/** Kullanılabilir kredi limiti: özkaynağın nota bağlı payı eksi mevcut borç (1.000 TL'ye yuvarlı). */
+export function creditLimit(g: Game) {
+  const { score } = credit(g);
+  if (score < MIN_SCORE || g.loans.some((l) => l.missed > 0)) return 0;
+  const room = Math.floor((equity(g) * (score - 300)) / 1000) - debt(g);
+  return Math.max(0, Math.floor(room / 100000) * 100000);
+}
+/** Kredi teklifi: nota göre faiz, toplam geri ödeme ve ilk taksit. */
+export function loanQuote(g: Game, kind: LoanKind, amount: number) {
+  const product = loanProducts[kind];
+  const { score } = credit(g);
+  const rate = Math.round((product.rate * (1600 - score)) / 1000);
+  const interest = Math.round((amount * rate) / 10000);
+  const total = amount + interest;
+  const reason =
+    g.loans.length >= MAX_LOANS
+      ? "Aynı anda en fazla " + MAX_LOANS + " kredi açık olabilir."
+      : score < MIN_SCORE
+        ? "Kredi notu " + MIN_SCORE + " altında; banka yeni kredi vermiyor."
+        : g.loans.some((l) => l.missed > 0)
+          ? "Geciken taksit varken yeni kredi verilmez."
+          : !Number.isSafeInteger(amount) || amount < Math.max(1, product.min)
+            ? "Tutar bu kredi için çok düşük."
+            : amount > creditLimit(g)
+              ? "Tutar kullanılabilir limiti aşıyor."
+              : "";
+  return {
+    kind,
+    amount,
+    rate,
+    interest,
+    total,
+    days: product.days,
+    installment:
+      Math.floor(amount / product.days) + Math.floor(interest / product.days),
+    reason,
+  };
+}
+function openLoan(g: Game, kind: LoanKind, amount: number, quote?: number) {
+  const q = loanQuote(g, kind, amount);
+  need(!q.reason, q.reason);
+  need(
+    quote === undefined || quote === q.total,
+    "Kredi koşulları değişti. Güncel teklifi kontrol edin.",
+  );
+  g.loans = [
+    ...g.loans,
+    {
+      id: "K" + g.rev,
+      kind,
+      principal: amount,
+      balance: amount,
+      interestLeft: q.interest,
+      left: q.days,
+      missed: 0,
+    },
+  ];
+}
+/** Bir sonraki taksit: kalan anapara ve faiz kalan taksitlere eşit bölünür; son taksit kalanı kapatır. */
+export const nextInstallment = (l: Loan) => {
+  const principal = l.left === 1 ? l.balance : Math.floor(l.balance / l.left);
+  const interest =
+    l.left === 1 ? l.interestLeft : Math.floor(l.interestLeft / l.left);
+  return { principal, interest, total: principal + interest };
+};
+/**
+ * Banka günü (kapalı süre için en fazla PAYROLL_CATCHUP gün): mevduat faizi, ardından
+ * her kredinin taksiti. Ödenemeyen taksit gecikme bedeliyle ertelenir; vade bir gün uzar.
+ */
+function bankDays(g: Game, today: number) {
+  if (g.bankDay >= today) return;
+  const days = Math.min(today - g.bankDay, PAYROLL_CATCHUP);
+  for (let i = 0; i < days; i++) {
+    const earned = Math.floor((g.bank * DEPOSIT_BPS) / 10000);
+    g.bank += earned;
+    g.interestIncome += earned;
+    const keep: Loan[] = [];
+    for (const loan of g.loans) {
+      const l = { ...loan };
+      const due = nextInstallment(l);
+      if (pay(g, due.total)) {
+        l.balance -= due.principal;
+        l.interestLeft -= due.interest;
+        g.interest += due.interest;
+        l.left--;
+        l.missed = 0;
+        g.onTime++;
+      } else {
+        const fee = Math.max(
+          100,
+          Math.round((due.total * LATE_FEE_PERCENT) / 100),
+        );
+        l.balance += fee;
+        g.lateFees += fee;
+        l.missed++;
+        g.late++;
+      }
+      if (l.left > 0) keep.push(l);
+    }
+    g.loans = keep;
+  }
+  g.bankDay = today;
 }
 
 /**
@@ -467,11 +728,12 @@ function payroll(g: Game, today: number) {
   if (g.paidDay >= today) return;
   const days = Math.min(today - g.paidDay, PAYROLL_CATCHUP);
   for (let i = 0; i < days; i++) {
-    while (g.staff > 0 && g.cash < g.staff * WAGE) {
+    // Maaş önce kasadan, yetmezse banka hesabından ödenir.
+    while (g.staff > 0 && g.cash + g.bank < g.staff * WAGE) {
       g.staff--;
       g.workers = Math.min(g.workers, g.staff);
     }
-    g.cash -= g.staff * WAGE;
+    pay(g, g.staff * WAGE);
     g.wages += g.staff * WAGE;
   }
   g.paidDay = today;
@@ -505,6 +767,7 @@ const overdue = (g: Game, today: number) =>
 export function due(g: Game, now: number): Command | undefined {
   const today = day(g, now);
   if (g.paidDay < today) return "payroll";
+  if (g.bankDay < today && bankActive(g)) return "bank";
   if (overdue(g, today)) return "expire";
   if (g.job && now >= g.ready) return "finish";
   return undefined;
@@ -541,6 +804,8 @@ export function advance(
     qty = 1,
     product = "chair",
     id,
+    loan,
+    quote,
   } = typeof arg === "number" ? { qty: arg } : arg;
   need(Object.hasOwn(catalog, product), "Geçersiz ürün.");
   const p = catalog[product];
@@ -549,6 +814,7 @@ export function advance(
     materials: { ...previous.materials },
     goods: { ...previous.goods },
     taken: { ...previous.taken },
+    loans: previous.loans.map((l) => ({ ...l })),
     last: Math.max(now, previous.last),
     rev: previous.rev + 1,
   };
@@ -560,6 +826,8 @@ export function advance(
     g.taken = record(products, () => 0);
   }
   payroll(g, today);
+  // Maaş adımı yalnız maaşı yazar; banka günü (kredi veya mevduat varsa) kendi satırında işlenir.
+  if (cmd !== "payroll" || !bankActive(g)) bankDays(g, today);
   if (cmd === "expire") expire(g, today);
   if (g.offerDay !== today) {
     g.offerDay = today;
@@ -605,7 +873,48 @@ export function advance(
       break;
     case "payroll":
     case "expire":
+    case "bank":
       break;
+    case "deposit":
+      need(
+        Number.isSafeInteger(qty) && qty >= 1 && qty <= g.cash,
+        "Kasada bu kadar para yok.",
+      );
+      g.cash -= qty;
+      g.bank += qty;
+      break;
+    case "withdraw":
+      need(
+        Number.isSafeInteger(qty) && qty >= 1 && qty <= g.bank,
+        "Bankada bu kadar para yok.",
+      );
+      g.bank -= qty;
+      g.cash += qty;
+      break;
+    case "borrow": {
+      need(
+        loan && Object.hasOwn(loanProducts, loan) && loan !== "leasing",
+        "Geçersiz kredi türü.",
+      );
+      openLoan(g, loan, qty, quote);
+      g.cash += qty;
+      break;
+    }
+    case "repay": {
+      // Erken ödeme: anapara düşer, kalan planlı faiz orantılı silinir; ceza yoktur.
+      const l = g.loans.find((x) => x.id === id);
+      need(l, "Kredi bulunamadı.");
+      const amount = Math.min(qty, l.balance);
+      need(Number.isSafeInteger(amount) && amount >= 1, "Geçersiz tutar.");
+      need(pay(g, amount), "Erken ödeme için kasa ve banka yetersiz.");
+      const after = l.balance - amount;
+      l.interestLeft = after
+        ? Math.round((l.interestLeft * after) / l.balance)
+        : 0;
+      l.balance = after;
+      if (!after) g.loans = g.loans.filter((x) => x !== l);
+      break;
+    }
     case "start": {
       need(
         !g.job && g.workers > 0,
@@ -680,14 +989,17 @@ export function advance(
     }
     case "upgrade": {
       const price = upgradePrice(g);
-      need(
-        !g.job &&
-          g.level < 3 &&
-          g.cash >= price &&
-          profit(g) - g.investment >= price,
-        "Geliştirme için boş hat ve yeterli birikmiş kazanç gerekli.",
-      );
-      g.cash -= price;
+      need(!g.job && g.level < 3, "Geliştirme için hat boş olmalı.");
+      if (loan === "leasing") {
+        // Makine finansmanı: bedel bankadan doğrudan makineye gider; borç ve varlık birlikte artar.
+        openLoan(g, "leasing", price, quote);
+      } else {
+        need(
+          g.cash >= price && profit(g) - g.investment >= price,
+          "Geliştirme için yeterli birikmiş kazanç gerekli (ya da makine finansmanı).",
+        );
+        g.cash -= price;
+      }
       g.investment += price;
       g.level++;
       break;

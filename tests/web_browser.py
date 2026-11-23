@@ -86,7 +86,7 @@ class WebDemo(unittest.TestCase):
           db.close(); return all;
         }""")
 
-    SLUGS = {"Ana panel": "panel", "Fabrikam": "fabrikam", "Depo": "depo", "Üretim": "uretim", "Piyasa": "piyasa", "Siparişler": "siparisler", "Finans": "finans", "Şirketim": "sirket"}
+    SLUGS = {"Ana panel": "panel", "Fabrikam": "fabrikam", "Depo": "depo", "Üretim": "uretim", "Piyasa": "piyasa", "Siparişler": "siparisler", "Finans": "finans", "Banka": "banka", "Şirketim": "sirket"}
 
     def visit(self, name):
         self.page.goto(self.url + "#" + self.SLUGS[name])
@@ -166,7 +166,7 @@ class WebDemo(unittest.TestCase):
     def test_layout_and_home_screen_manifest(self):
         for width in [320,375,440,768,1440]:
             self.page.set_viewport_size({"width":width,"height":900})
-            for view in ["Ana panel","Depo","Üretim","Piyasa","Siparişler","Fabrikam","Finans","Şirketim"]:
+            for view in ["Ana panel","Depo","Üretim","Piyasa","Siparişler","Fabrikam","Finans","Banka","Şirketim"]:
                 self.visit(view)
                 self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= innerWidth"))
         # Kart içindeki plan başlıkları sayfa başlığının yapışkan stilini almaz.
@@ -230,7 +230,7 @@ class WebDemo(unittest.TestCase):
         expect(p.locator(".chip.cash")).to_have_text("150.000 TL")
         saved = self.stored()
         self.assertEqual([saved[k] for k in saved if k.startswith("yedek-")], [bad])
-        self.assertEqual(saved["1"]["version"], 3)
+        self.assertEqual(saved["1"]["version"], 4)
 
     def test_back_to_back_resets_keep_the_played_save(self):
         result = self.page.evaluate("""async () => {
@@ -286,7 +286,7 @@ class WebDemo(unittest.TestCase):
         old = self.stored()["1"]
         # Sürüm 1: çalışan sistemi ve çok ürün öncesi tek ürünlü kayıt.
         game = old["game"]
-        for key in ("staff", "wages", "paidDay", "materials", "goods", "jobProduct", "penalties", "writeoffs", "rep", "offerDay", "offers", "orders", "delivered"):
+        for key in ("staff", "wages", "paidDay", "materials", "goods", "jobProduct", "penalties", "writeoffs", "rep", "offerDay", "offers", "orders", "delivered", "bank", "loans", "interest", "lateFees", "interestIncome", "onTime", "late", "bankDay"):
             del game[key]
         game.update(lots=1, rawCost=400000, chairs=0, goodsCost=0, taken=0)
         old["version"] = 1
@@ -295,7 +295,7 @@ class WebDemo(unittest.TestCase):
         self.visit("Fabrikam")
         self.check_tile("Toplam çalışan", "1 / 6")
         saved = self.stored()["1"]
-        self.assertEqual(saved["version"], 3)
+        self.assertEqual(saved["version"], 4)
         self.assertEqual([saved["game"][k] for k in ("staff", "workers", "wages")], [1, 0, 0])
         self.assertEqual(saved["game"]["materials"]["board"], {"qty": 20, "cost": 300000})
         self.assertEqual(self.errors, [])
@@ -359,6 +359,70 @@ class WebDemo(unittest.TestCase):
         expect(self.page.locator("#message")).to_have_text("Satış tamamlandı, tahsilat kasada.")
         self.visit("Üretim")
         expect(self.page.get_by_role("button", name="Yemek masası")).to_be_disabled()
+
+    def test_bank_transfer_loan_with_consent_and_daily_installment(self):
+        p = self.page
+        self.visit("Banka")
+        self.check_tile("Kredi notu", "600 / 1000")
+        self.check_tile("Kredi limiti", "45.000 TL")
+        p.get_by_role("button", name="Bankaya yatır · 10.000 TL").click()
+        self.check_tile("Banka hesabı", "10.000 TL")
+        self.check_tile("Kasa", "140.000 TL")
+        # Onay penceresi reddedilirse kredi açılmaz.
+        offer = p.locator(".offer").filter(has_text="Kısa vadeli işletme kredisi")
+        p.once("dialog", lambda d: d.dismiss())
+        offer.get_by_role("button", name="45.000 TL kullan").click()
+        self.check_tile("Toplam borç", "0 TL")
+        dialogs = []
+        def accept(d):
+            dialogs.append(d.message)
+            d.accept()
+        p.once("dialog", accept)
+        offer.get_by_role("button", name="45.000 TL kullan").click()
+        self.check_tile("Toplam borç", "45.000 TL")
+        self.check_tile("Kasa", "185.000 TL")
+        self.assertIn("Toplam geri ödeme: 46.800 TL", dialogs[0])
+        self.visit("Finans")
+        self.check_stat("Kredi borcu", "−45.000 TL")
+        self.check_stat("Özkaynak", "150.000 TL")
+        p.close()
+        # Ertesi gün: maaş, mevduat faizi ve taksit bir kez, ayrı satırlarda.
+        self.page = self.open(self.start + timedelta(minutes=5, seconds=1), "#banka", "Banka")
+        self.check_tile("Toplam borç", "36.000 TL")
+        self.check_tile("Banka hesabı", "10.020 TL")
+        self.page.reload()
+        self.check_tile("Toplam borç", "36.000 TL")
+        self.visit("Finans")
+        expect(self.page.locator(".log .line").filter(has_text="Banka günü")).to_have_count(1)
+        self.check_stat("Kredi faizi", "−360 TL")
+        self.check_stat("Mevduat faizi", "+20 TL")
+        self.assertEqual(self.errors, [])
+
+    def test_machine_financing_upgrade_needs_consent(self):
+        p = self.page
+        self.visit("Fabrikam")
+        expect(p.get_by_role("button", name="Makineyi geliştir")).to_be_disabled()
+        p.once("dialog", lambda d: d.accept())
+        p.get_by_role("button", name="Makine finansmanıyla geliştir").click()
+        expect(p.get_by_role("heading", name="Montaj hattı · Seviye 2")).to_be_visible()
+        self.visit("Banka")
+        expect(p.locator(".order").filter(has_text="Makine finansmanı")).to_be_visible()
+        self.check_tile("Toplam borç", "3.000 TL")
+
+    def test_version_three_save_gains_an_empty_bank(self):
+        def strip(g):
+            for k in ("bank", "loans", "interest", "lateFees", "interestIncome", "onTime", "late", "bankDay"):
+                del g[k]
+        saved = self.stored()["1"]
+        strip(saved["game"])
+        saved["version"] = 3
+        self.put_raw(saved)
+        self.page.reload()
+        self.visit("Banka")
+        self.check_tile("Banka hesabı", "0 TL")
+        stored = self.stored()["1"]
+        self.assertEqual(stored["version"], 4)
+        self.assertEqual([stored["game"]["bank"], stored["game"]["loans"]], [0, []])
 
     def test_counter_offer_outcomes_and_declines(self):
         low = dict(self.OFFER, id="1-1", customer=1, ceiling=960000)

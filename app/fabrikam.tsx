@@ -3,6 +3,7 @@ import { useAtolye } from "../src/session";
 import { Card, Page, Line, Action, cash, s } from "../src/ui";
 import {
   cycle,
+  loanQuote,
   profit,
   seats,
   upgradePrice,
@@ -68,6 +69,19 @@ export default function FactoryScreen() {
               label={"Makineyi geliştir · " + cash(p)}
               disabled={!!g.job || profit(g) - g.investment < p || g.cash < p}
               onPress={() => execute("upgrade")}
+            />
+            <Action
+              label={
+                "Makine finansmanıyla geliştir · " +
+                cash(loanQuote(g, "leasing", p).total)
+              }
+              disabled={!!g.job || !!loanQuote(g, "leasing", p).reason}
+              onPress={() =>
+                execute("upgrade", {
+                  loan: "leasing",
+                  quote: loanQuote(g, "leasing", p).total,
+                })
+              }
             />
           </>
         ) : (

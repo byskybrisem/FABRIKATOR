@@ -48,6 +48,7 @@ const pages = [
   "piyasa",
   "siparisler",
   "finans",
+  "banka",
   "sirket",
 ];
 await writeFile(

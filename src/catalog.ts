@@ -120,3 +120,39 @@ export const customers: { name: string; bias: number; size: number }[] = [
   { name: "Çukurova Lokanta Birliği", bias: -0.03, size: 0 },
   { name: "Uludağ Dağ Evleri", bias: 0.05, size: 0 },
 ];
+
+export type LoanKind = "isletme" | "buyume" | "leasing";
+export interface LoanProduct {
+  name: string;
+  /** Vade: oyun günü olarak taksit sayısı. */
+  days: number;
+  /** Not 600'deki toplam faiz (baz puan, vade boyunca). Kredi notu bunu ölçekler. */
+  rate: number;
+  /** En düşük kredi tutarı (kuruş). */
+  min: number;
+  note: string;
+}
+/** Kurgusal oyun bankasının ürünleri; gerçek bankacılık hizmeti değildir. */
+export const loanProducts: Record<LoanKind, LoanProduct> = {
+  isletme: {
+    name: "Kısa vadeli işletme kredisi",
+    days: 5,
+    rate: 400,
+    min: 500000,
+    note: "Ham madde ve maaş için kısa süreli nakit.",
+  },
+  buyume: {
+    name: "Orta vadeli büyüme kredisi",
+    days: 15,
+    rate: 1500,
+    min: 5000000,
+    note: "Daha büyük tutar, daha uzun vade, daha yüksek toplam faiz.",
+  },
+  leasing: {
+    name: "Makine finansmanı",
+    days: 10,
+    rate: 800,
+    min: 0,
+    note: "Yalnız makine geliştirmesinde; bedel doğrudan makineye gider.",
+  },
+};

@@ -328,20 +328,31 @@ test("uzun kaotik simülasyon: bedava para, negatif stok veya tutarsız kayıt y
     "counter",
     "reserve",
     "deliver",
+    "deposit",
+    "withdraw",
+    "borrow",
+    "repay",
   ];
   const { g, now } = simulate(
     (g, rand) => {
       const cmd = pick(rand, all);
       const id = ["accept", "decline", "counter"].includes(cmd)
         ? g.offers[0]?.id
-        : g.orders[0]?.id;
+        : cmd === "repay"
+          ? g.loans[0]?.id
+          : g.orders[0]?.id;
+      const money = ["deposit", "withdraw", "borrow", "repay"].includes(cmd);
       return [
         [
           cmd,
           {
             product: pick(rand, products),
-            qty: 1 + Math.floor(rand() * (cmd === "sell" ? 15 : 3)),
+            // Banka komutlarında miktar kuruştur (100 – 5.000.000 TL arası).
+            qty: money
+              ? Math.floor(rand() ** 3 * 500000000) + 10000
+              : 1 + Math.floor(rand() * (cmd === "sell" ? 15 : 3)),
             id,
+            loan: pick(rand, ["isletme", "buyume", "leasing"]),
           },
         ],
       ];
