@@ -31,6 +31,18 @@ Web sürümü mobil uygulamayla aynı `src/workshop.ts` ve `src/catalog.ts` kodu
 - Kasası tükenen atölye, fazla malzemesini kayıtlı maliyetinin %60'ına elden çıkarabilir. Fark "stok değer kaybı" olarak gider yazılır. Bu yol, para ve çalışan kalmadığında oyunun kilitlenmesini önler.
 - Kayıt sürüm 3: tek ürünlü web (v1/v2) ve mobil SQLite kayıtları maliyeti kuruşu kuruşuna koruyarak taşınır.
 
+## Banka ve kredi
+
+Kurgusal oyun bankasıdır; gerçek bankacılık hizmeti değildir.
+
+- **Şirketim → Banka**. Kasa ile banka hesabı arasında transfer yapılır; transfer gelir veya gider değildir. Mevduat günlük %0,2 faiz alır. Taksit ve maaş önce kasadan, yetmezse bankadan ödenir.
+- **Kredi notu** 0–1000 arasındadır ve kalemleri ekranda görünür. Başlangıç 600'dür. Zamanında ödenen taksit, kârlılık ve teslim edilen sipariş notu yükseltir. Gecikme, borç/varlık oranı ve takipteki kredi notu düşürür. Not faiz oranını ve limiti belirler. 400 altında yeni kredi verilmez.
+- **Limit**: özkaynak × (not − 300)/1000 − mevcut borç. Başlangıçta 45.000 TL'dir. En fazla 3 açık kredi olabilir. Geciken taksit varken yeni kredi verilmez.
+- Krediler: **kısa vadeli işletme** (5 gün, not 600'de toplam %4), **orta vadeli büyüme** (15 gün, %15, en az 50.000 TL) ve **makine finansmanı** (10 gün, %8). Makine finansmanında bedel doğrudan makineye gider. Kredi, koşulları gösteren onay penceresi kabul edilmeden açılmaz. Koşullar o arada değiştiyse işlem reddedilir.
+- Taksit her oyun gününün başında bir kez ödenir: kalan anapara ve kalan faiz, kalan taksitlere eşit bölünür. Ödenemeyen taksit %5 gecikme bedeliyle borca eklenir, vade bir gün uzar ve not düşer. Kapalı geçen süre için en fazla 3 gün işlenir. Erken ödeme kalan faizi siler, cezası yoktur.
+- Muhasebe: kasa + banka + stoklar + yarı mamul + makine = özkaynak + borç. Kredi anaparası kâr değildir. Faiz ve gecikme bedeli gider, mevduat faizi gelirdir. Finans ekranı faaliyet kârını ve net kârı ayrı gösterir.
+- Kayıt sürüm 4: önceki kayıtlar boş banka hesabı ve kredisiz taşınır.
+
 ## Güncellemeler
 
 Yeni yayın service worker tarafından arka planda indirilir ve hemen devralır. Açık oyun zorla yenilenmez; **Güncelleme hazır · Güncelle** bildirimi çıkar. Ana ekrana eklenmiş uygulama bir sonraki açılışta yeni sürümle başlar. Sayfanın altındaki **Sürüm** etiketi derlemenin kimliğidir. Kayıt IndexedDB'de kalır, güncelleme onu silmez.

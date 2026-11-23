@@ -18,6 +18,7 @@ export const routes = [
   ["Piyasa", "/piyasa"],
   ["Siparişler", "/siparisler"],
   ["Finans", "/finans"],
+  ["Banka", "/banka"],
 ] as const;
 export function Page({
   title,

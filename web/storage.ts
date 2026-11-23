@@ -9,6 +9,7 @@ import {
   type Game,
   type Command,
   type ProductId,
+  type LoanKind,
 } from "../src/workshop.ts";
 
 export type Entry = {
@@ -17,17 +18,20 @@ export type Entry = {
   movement: number;
 };
 /** Bump when the stored shape changes and add a step to `migrate`. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export type Save = { version: number; game: Game; log: Entry[] };
 type Input = {
-  command: Exclude<Command, "finish" | "payroll" | "expire">;
+  command: Exclude<Command, "finish" | "payroll" | "expire" | "bank">;
   revision: number;
   /** `game.born` of the save the player was looking at; rejects actions from before a reset. */
   born?: number;
   quantity?: number;
   product?: ProductId;
-  /** Teklif veya sipariş kimliği. */
+  /** Teklif, sipariş veya kredi kimliği. */
   id?: string;
+  loan?: LoanKind;
+  /** Oyuncunun onayladığı toplam geri ödeme. */
+  quote?: number;
   quoteDay?: number;
 };
 
@@ -74,7 +78,7 @@ function migrate(raw: unknown): Save {
     throw new CorruptSave("Atölye kaydı eksik.");
   let game: Game;
   try {
-    // v1/v2 → v3: çalışan sistemi ve çok ürünlü stok; eski tek usta bordroda kalır.
+    // v1–v3 → v4: çalışan sistemi, çok ürünlü stok ve banka; eski tek usta bordroda kalır.
     game = upgradeGame(save.game);
     validate(game);
   } catch (error) {
@@ -144,6 +148,8 @@ export function transact(
             qty: input.quantity,
             product: input.product,
             id: input.id,
+            loan: input.loan,
+            quote: input.quote,
           });
         next = entries.length
           ? {

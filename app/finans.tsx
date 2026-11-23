@@ -1,6 +1,6 @@
 import { useAtolye } from "../src/session";
 import { Card, Line, Page, cash } from "../src/ui";
-import { profit, salesProfit } from "../src/workshop";
+import { debt, operatingProfit, profit, salesProfit } from "../src/workshop";
 const names: Record<string, string> = {
   opening: "Açılış",
   buy: "Ham madde",
@@ -16,6 +16,11 @@ const names: Record<string, string> = {
   decline: "Teklif reddi",
   reserve: "Siparişe stok ayırma",
   deliver: "Sipariş tahsilatı",
+  deposit: "Bankaya yatırıldı",
+  withdraw: "Bankadan çekildi",
+  borrow: "Kredi kullanıldı",
+  repay: "Kredi erken ödemesi",
+  bank: "Banka günü: taksit ve faiz",
   start: "Enerji ve paketleme",
   finish: "Mamul girişi",
   sell: "Net satış tahsilatı",
@@ -34,11 +39,17 @@ export default function Finance() {
         <Line label="İşçilik gideri" value={cash(g.wages)} />
         <Line label="Sözleşme cezaları" value={cash(g.penalties)} />
         <Line label="Stok değer kaybı" value={cash(g.writeoffs)} />
-        <Line label="Faaliyet kârı" value={cash(profit(g))} />
+        <Line label="Faaliyet kârı" value={cash(operatingProfit(g))} />
+        <Line label="Kredi faizi" value={cash(g.interest)} />
+        <Line label="Gecikme bedeli" value={cash(g.lateFees)} />
+        <Line label="Mevduat faizi" value={cash(g.interestIncome)} />
+        <Line label="Net kâr" value={cash(profit(g))} />
       </Card>
       <Card title="Nakit ve yatırım">
         <Line label="Kasa" value={cash(g.cash)} />
         <Line label="Makine yatırımları" value={cash(g.investment)} />
+        <Line label="Banka hesabı" value={cash(g.bank)} />
+        <Line label="Kredi borcu" value={cash(debt(g))} />
       </Card>
       <Card title="Son hareketler">
         {log.map((e) => (

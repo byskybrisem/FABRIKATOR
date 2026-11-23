@@ -24,8 +24,21 @@ import {
   PENALTY_PERCENT,
   SALVAGE_PERCENT,
   WAGE,
+  assets,
+  credit,
+  creditLimit,
+  debt,
+  equity,
+  loanProducts,
+  loanQuote,
+  nextInstallment,
+  operatingProfit,
+  DEPOSIT_BPS,
+  LATE_FEE_PERCENT,
+  MAX_LOANS,
   type Command,
   type Game,
+  type LoanKind,
   type ProductId,
 } from "../src/workshop.ts";
 import {
@@ -45,6 +58,7 @@ const routes = {
   piyasa: "Piyasa",
   siparisler: "Siparişler",
   finans: "Finans",
+  banka: "Banka",
   sirket: "Şirketim",
 } as const;
 type Page = keyof typeof routes;
@@ -73,7 +87,7 @@ const groups: { name: string; icon: string; pages: Page[] }[] = [
   {
     name: "Şirketim",
     icon: "M4 21V5l8-3 8 3v16 M9 21v-5h6v5 M8 8h2m4 0h2M8 12h2m4 0h2",
-    pages: ["finans", "sirket"],
+    pages: ["finans", "banka", "sirket"],
   },
 ];
 const tabName: Partial<Record<Page, string>> = { piyasa: "Toptancı" };
@@ -105,7 +119,7 @@ const link = (to: Page, label: string) =>
   '">' +
   label +
   ' <span aria-hidden="true">→</span></a>';
-type Act = Exclude<Command, "finish" | "payroll" | "expire">;
+type Act = Exclude<Command, "finish" | "payroll" | "expire" | "bank">;
 const button = (
   cmd: Act,
   label: string,
@@ -116,6 +130,10 @@ const button = (
     hint?: string;
     product?: ProductId;
     id?: string;
+    loan?: LoanKind;
+    quote?: number;
+    /** Gösterilecek onay metni; oyuncu onaylamadan işlem yapılmaz. */
+    confirm?: string;
   } = {},
 ) =>
   '<div class="action"><button data-cmd="' +
@@ -125,6 +143,11 @@ const button = (
   '"' +
   (opts.product ? ' data-product="' + opts.product + '"' : "") +
   (opts.id ? ' data-id="' + opts.id + '"' : "") +
+  (opts.loan ? ' data-loan="' + opts.loan + '"' : "") +
+  (opts.quote !== undefined ? ' data-quote="' + opts.quote + '"' : "") +
+  (opts.confirm
+    ? ' data-confirm="' + opts.confirm.replace(/"/g, "&quot;") + '"'
+    : "") +
   (opts.kind ? ' class="' + opts.kind + '"' : "") +
   (opts.disabled ? " disabled" : "") +
   ">" +
@@ -179,6 +202,11 @@ const names: Record<Command | "opening", string> = {
   reserve: "Siparişe stok ayrıldı",
   deliver: "Sipariş tahsilatı",
   expire: "Sözleşme cezası",
+  deposit: "Bankaya yatırıldı",
+  withdraw: "Bankadan çekildi",
+  borrow: "Kredi kullanıldı",
+  repay: "Kredi erken ödemesi",
+  bank: "Banka günü: taksit ve faiz",
 };
 let db: IDBDatabase;
 let state: Save;
@@ -250,6 +278,29 @@ function advice(g: Game, now: number): Note[] {
             : " (" + (o.dueDay - today) + " gün kaldı)."),
         to: "uretim",
         cta: "Üret",
+      });
+  }
+  const late = g.loans.filter((l) => l.missed);
+  if (late.length)
+    notes.push({
+      tone: "bad",
+      text:
+        late.length +
+        " kredinin taksiti gecikti; her gün gecikme bedeli işliyor ve kredi notu düşüyor.",
+      to: "banka",
+      cta: "Bankaya git",
+    });
+  else {
+    const next = g.loans.reduce((s, l) => s + nextInstallment(l).total, 0);
+    if (next && next > g.cash + g.bank)
+      notes.push({
+        tone: "warn",
+        text:
+          "Yeni günün taksiti " +
+          money(next) +
+          "; kasa ve banka yetmiyor. Satış yapın ya da stok fazlasını elden çıkarın.",
+        to: "banka",
+        cta: "Banka",
       });
   }
   if (g.job)
@@ -664,8 +715,247 @@ function factory(g: Game) {
                     money(p - Math.max(0, avail)) +
                     " daha birikmeli."
                   : "Yatırım kasadan çıkar; gider değil, varlık olarak kaydedilir.",
-            })
+            }) +
+            leasingButton(g, p)
         : "<p>En yüksek makine seviyesindesiniz.</p>",
+    )
+  );
+}
+
+function leasingButton(g: Game, price: number) {
+  const q = loanQuote(g, "leasing", price);
+  return button(
+    "upgrade",
+    "Makine finansmanıyla geliştir · " + q.days + " taksit",
+    {
+      kind: "ghost",
+      loan: "leasing",
+      quote: q.total,
+      disabled: !!g.job || !!q.reason,
+      confirm: loanText(q, "Makine finansmanı"),
+      hint: g.job
+        ? "Hat çalışırken geliştirilemez."
+        : q.reason ||
+          "Bedel bankadan makineye gider: toplam geri ödeme " +
+            money(q.total) +
+            " (faiz " +
+            money(q.interest) +
+            ").",
+    },
+  );
+}
+function loanText(q: ReturnType<typeof loanQuote>, name: string) {
+  return (
+    name +
+    "\nTutar: " +
+    money(q.amount) +
+    "\nToplam faiz: " +
+    money(q.interest) +
+    " (%" +
+    fmt.format(q.rate / 100) +
+    ")\nToplam geri ödeme: " +
+    money(q.total) +
+    "\nVade: " +
+    q.days +
+    " oyun günü · günlük taksit ≈ " +
+    money(q.installment) +
+    "\nÖdenemeyen taksit gecikme bedeli doğurur ve kredi notunu düşürür. Onaylıyor musunuz?"
+  );
+}
+
+function bank(g: Game) {
+  const c = credit(g),
+    limit = creditLimit(g),
+    d = debt(g);
+  const next = g.loans.reduce((s, l) => s + nextInstallment(l).total, 0);
+  const ratio = Math.round((100 * d) / Math.max(1, assets(g)));
+  const tone: Tone = c.score >= 700 ? "ok" : c.score >= 500 ? "warn" : "bad";
+  const amounts = (max: number) =>
+    [...new Set([1000000, 2500000, 5000000, 10000000, max])]
+      .filter((a) => a > 0 && a <= max)
+      .sort((a, b) => a - b);
+  const offers = (["isletme", "buyume"] as LoanKind[]).map((kind) => {
+    const product = loanProducts[kind];
+    const sizes = [
+      ...new Set(
+        [product.min, Math.floor(limit / 2 / 100000) * 100000, limit].filter(
+          (a) => a >= product.min && a <= limit,
+        ),
+      ),
+    ];
+    const sample = loanQuote(g, kind, Math.max(product.min, limit));
+    return (
+      '<article class="offer"><header><strong>' +
+      product.name +
+      "</strong>" +
+      badge(product.days + " gün", "info") +
+      '</header><p class="small">' +
+      product.note +
+      "</p><dl>" +
+      line("Toplam faiz (notunuzla)", "%" + fmt.format(sample.rate / 100)) +
+      line("En düşük tutar", money(product.min)) +
+      "</dl>" +
+      (sizes.length
+        ? '<div class="actions">' +
+          sizes
+            .map((a) => {
+              const q = loanQuote(g, kind, a);
+              return button(
+                "borrow",
+                money(a) + " kullan · " + money(q.installment) + "/gün",
+                {
+                  qty: a,
+                  loan: kind,
+                  quote: q.total,
+                  kind: a === limit ? "" : "ghost",
+                  disabled: !!q.reason,
+                  confirm: loanText(q, product.name),
+                  hint: "Toplam geri ödeme " + money(q.total),
+                },
+              );
+            })
+            .join("") +
+          "</div>"
+        : '<p class="small">' +
+          (loanQuote(g, kind, product.min).reason ||
+            "Kullanılabilir limit bu kredi için yetersiz.") +
+          "</p>") +
+      "</article>"
+    );
+  });
+  const loans = g.loans.map((l) => {
+    const n = nextInstallment(l);
+    return (
+      '<article class="order' +
+      (l.missed ? " late" : "") +
+      '"><header><strong>' +
+      loanProducts[l.kind].name +
+      "</strong>" +
+      badge(
+        l.missed ? l.missed + " taksit gecikti" : l.left + " taksit kaldı",
+        l.missed ? "bad" : "ok",
+      ) +
+      "</header><dl>" +
+      line("Kullanılan", money(l.principal)) +
+      line("Kalan anapara", money(l.balance)) +
+      line("Kalan planlı faiz", money(l.interestLeft)) +
+      line(
+        "Sonraki taksit",
+        money(n.total) +
+          " (anapara " +
+          money(n.principal) +
+          " + faiz " +
+          money(n.interest) +
+          ")",
+      ) +
+      "</dl>" +
+      '<div class="actions">' +
+      button("repay", "Tamamını erken öde · " + money(l.balance), {
+        id: l.id,
+        qty: l.balance,
+        kind: "ghost",
+        disabled: g.cash + g.bank < l.balance,
+        hint: "Kalan planlı faiz silinir; erken ödeme cezası yoktur.",
+      }) +
+      "</div></article>"
+    );
+  });
+  return (
+    '<div class="stats">' +
+    stat("Kasa", money(g.cash), "üretim ve satın alma için") +
+    stat(
+      "Banka hesabı",
+      money(g.bank),
+      "günlük %" + fmt.format(DEPOSIT_BPS / 100) + " mevduat faizi",
+    ) +
+    stat(
+      "Kredi limiti",
+      money(limit),
+      "kullanılabilir",
+      limit ? "ok" : "warn",
+    ) +
+    stat(
+      "Toplam borç",
+      money(d),
+      g.loans.length + " / " + MAX_LOANS + " kredi",
+      d ? "warn" : "",
+    ) +
+    stat(
+      "Sonraki taksit",
+      money(next),
+      "yeni günün başında",
+      next > g.cash + g.bank ? "bad" : "",
+    ) +
+    stat(
+      "Kredi notu",
+      c.score + " / 1000",
+      c.score >= 400 ? "faizi ve limiti belirler" : "yeni kredi verilmez",
+      tone,
+    ) +
+    stat(
+      "Ödenen faiz",
+      money(g.interest),
+      "gecikme bedeli " + money(g.lateFees),
+    ) +
+    stat(
+      "Borç / varlık",
+      "%" + ratio,
+      "varlık " + money(assets(g)),
+      ratio > 50 ? "bad" : ratio > 25 ? "warn" : "",
+    ) +
+    "</div>" +
+    card(
+      "Kasa ve banka",
+      '<p class="lead">Transfer gelir veya gider değildir. Taksit ve maaş önce kasadan, yetmezse bankadan ödenir.</p>' +
+        '<div class="actions">' +
+        amounts(g.cash)
+          .map((a) =>
+            button("deposit", "Bankaya yatır · " + money(a), {
+              qty: a,
+              kind: "ghost",
+            }),
+          )
+          .join("") +
+        amounts(g.bank)
+          .map((a) =>
+            button("withdraw", "Kasaya çek · " + money(a), {
+              qty: a,
+              kind: "ghost",
+            }),
+          )
+          .join("") +
+        "</div>",
+    ) +
+    card(
+      "Açık krediler",
+      loans.length
+        ? '<div class="plans">' + loans.join("") + "</div>"
+        : "<p>Açık kredi yok.</p>",
+    ) +
+    card(
+      "Kredi teklifleri",
+      '<p class="lead">Limit: özkaynağın nota bağlı payı eksi mevcut borç. Krediler bedava para değildir; nakit ve borç birlikte artar, faiz giderdir. Ödenemeyen taksit %' +
+        LATE_FEE_PERCENT +
+        " gecikme bedeli doğurur.</p>" +
+        '<div class="plans">' +
+        offers.join("") +
+        "</div>",
+    ) +
+    card(
+      "Kredi notu nasıl hesaplanıyor?",
+      "<dl>" +
+        c.parts
+          .map(([label, pts]) =>
+            line(
+              label,
+              (pts > 0 ? "+" : pts < 0 ? "−" : "") + Math.abs(pts),
+              pts > 0 ? "good" : pts < 0 ? "neg" : "",
+            ),
+          )
+          .join("") +
+        line("Kredi notu", String(c.score), "total") +
+        "</dl>" +
+        '<p class="small">Kurgusal oyun bankasıdır; gerçek bankacılık hizmeti değildir.</p>',
     )
   );
 }
@@ -1193,7 +1483,7 @@ function finance(g: Game) {
     '<div class="stats">' +
     stat("Kasa", money(g.cash)) +
     stat(
-      "Faaliyet kârı",
+      "Net kâr",
       signed(profit(g)),
       g.income ? "marj %" + margin : "henüz satış yok",
       profit(g) >= 0 ? "ok" : "bad",
@@ -1213,18 +1503,23 @@ function finance(g: Game) {
         line("İşçilik gideri", "−" + money(g.wages), "neg") +
         line("Sözleşme cezaları", "−" + money(g.penalties), "neg") +
         line("Stok değer kaybı", "−" + money(g.writeoffs), "neg") +
+        line("Faaliyet kârı", signed(operatingProfit(g)), "total") +
+        line("Kredi faizi", "−" + money(g.interest), "neg") +
+        line("Gecikme bedeli", "−" + money(g.lateFees), "neg") +
+        line("Mevduat faizi", "+" + money(g.interestIncome), "good") +
         line(
-          "Faaliyet kârı",
+          "Net kâr",
           signed(profit(g)),
           profit(g) >= 0 ? "total good" : "total bad",
         ) +
         "</dl>" +
-        '<p class="small">Satılan ürün maliyeti ham madde, enerji ve paketlemeden oluşur. Makine yatırımı gider değil, varlıktır.</p>',
+        '<p class="small">Satılan ürün maliyeti ham madde, enerji ve paketlemeden oluşur. Makine yatırımı ve kredi anaparası gider değildir; kasa–banka transferi gelir değildir.</p>',
     ) +
     card(
       "Varlıklar",
       "<dl>" +
         line("Kasa", money(g.cash)) +
+        line("Banka hesabı", money(g.bank)) +
         line(
           "Ham madde stoku",
           money(g.materials.board.cost + g.materials.kit.cost),
@@ -1235,8 +1530,11 @@ function finance(g: Game) {
           money(stockValue(g) - g.materials.board.cost - g.materials.kit.cost),
         ) +
         line("Makine yatırımları", money(g.investment)) +
-        line("Toplam", money(CAPITAL + profit(g)), "total") +
-        "</dl>",
+        line("Toplam varlık", money(assets(g)), "total") +
+        line("Kredi borcu", "−" + money(debt(g)), "neg") +
+        line("Özkaynak", money(equity(g)), "total") +
+        "</dl>" +
+        '<p class="small">Varlık = özkaynak + borç. Özkaynak = başlangıç sermayesi + net kâr.</p>',
     ) +
     card(
       "Son hareketler",
@@ -1262,11 +1560,6 @@ function finance(g: Game) {
 
 function company(g: Game) {
   const soon: [string, string, string][] = [
-    [
-      "Banka ve kredi",
-      "Kredi notu, işletme kredisi, taksit ve faiz",
-      "Paket 2",
-    ],
     ["Borsa", "Kurgusal hisseler, portföy ve kâr/zarar", "Paket 3"],
     ["Mobilya kataloğu", "Altı ürün grubu, kalite ve tedarikçiler", "Paket 4"],
     ["Satış kanalları", "Mağaza, e-ticaret, ihracat, açık artırma", "Paket 5"],
@@ -1278,7 +1571,11 @@ function company(g: Game) {
   ];
   return (
     '<div class="stats">' +
-    stat("Şirket değeri", money(CAPITAL + profit(g)), "özkaynak") +
+    stat(
+      "Şirket değeri",
+      money(equity(g)),
+      "özkaynak · borç " + money(debt(g)),
+    ) +
     stat(
       "İtibar",
       g.rep + " / 100",
@@ -1344,6 +1641,8 @@ function contents(view: Page, g: Game, now: number) {
       return orders(g, now);
     case "finans":
       return finance(g);
+    case "banka":
+      return bank(g);
     case "sirket":
       return company(g);
   }
@@ -1489,6 +1788,10 @@ async function reset() {
   }
 }
 const done: Partial<Record<Command, string>> = {
+  deposit: "Para banka hesabına aktarıldı.",
+  withdraw: "Para kasaya aktarıldı.",
+  borrow: "Kredi kullanıldı; tutar kasada. Taksitler her yeni gün kesilir.",
+  repay: "Kredi borcu ödendi.",
   buy: "Ham madde depoya girdi.",
   hire: "Yeni montaj çalışanı işe başladı. Hatta atamayı unutmayın.",
   fire: "Çalışan ayrıldı; günlük maaş yükü azaldı.",
@@ -1519,6 +1822,8 @@ screen.addEventListener("click", async (event) => {
   const target = el.closest<HTMLButtonElement>("button[data-cmd]");
   if (!target || target.disabled || busy || !state) return;
   const cmd = target.dataset.cmd as Act;
+  // Kredi gibi yükümlülük doğuran işlemler oyuncu koşulları onaylamadan yapılmaz.
+  if (target.dataset.confirm && !window.confirm(target.dataset.confirm)) return;
   const tapTime = performance.now();
   // Aynı düğmeye çift dokunma yok sayılır; farklı miktar veya kayıt ayrı bir karardır.
   const key =
@@ -1542,6 +1847,8 @@ screen.addEventListener("click", async (event) => {
       quantity: Number(target.dataset.qty),
       product: target.dataset.product as ProductId | undefined,
       id,
+      loan: target.dataset.loan as LoanKind | undefined,
+      quote: target.dataset.quote ? Number(target.dataset.quote) : undefined,
       quoteDay: shownDay,
     });
     message.textContent =
