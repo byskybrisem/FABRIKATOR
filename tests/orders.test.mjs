@@ -289,14 +289,18 @@ function simulate(policy, steps, seed0) {
     for (let auto = due(g, now); auto; auto = due(g, now))
       g = advance(g, auto, now);
     for (const [cmd, arg] of policy(g, rand, now)) {
+      let next;
       try {
-        const next = advance(g, cmd, now, arg);
-        assert.equal(next.rev, g.rev + 1);
-        g = next;
-        ok++;
+        next = advance(g, cmd, now, arg);
       } catch (e) {
         // Yalnız oyunun kendi kuralları reddedebilir; tutarlılık hatası asla olmamalı.
         assert.doesNotMatch(String(e.message), /tutarsız|doğrulanamadı/);
+      }
+      // Kabul edilen işlem tam bir revizyon ilerletir (try dışında: yutulmaz).
+      if (next) {
+        assert.equal(next.rev, g.rev + 1);
+        g = next;
+        ok++;
       }
       assert.ok(g.cash >= 0);
       for (const p of products)
